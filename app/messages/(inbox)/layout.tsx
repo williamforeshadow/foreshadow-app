@@ -1,7 +1,6 @@
 'use client';
 
 import { useSelectedLayoutSegment } from 'next/navigation';
-import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { MessagesProvider, useMessages } from '@/components/messages/MessagesProvider';
 import { ConversationList } from '@/components/messages/ConversationList';
@@ -55,15 +54,36 @@ function MessagesChrome({ children }: { children: React.ReactNode }) {
 
   if (isMobile) {
     if (segment !== null) return <>{children}</>;
+    // Tab-root page owning its own chrome — same header grammar as
+    // My Assignments / Tasks / Schedule: title + fine print + toolbar in one
+    // gradient block, capped with a hairline. The search / sort / filter
+    // cluster renders ONCE, on the toolbar row beside the tabs.
     return (
-      <MobileRouteShell title="Messages" rightSlot={<ConversationHeaderActions />}>
-        <div className="flex h-full min-h-0 flex-col">
-          <ListControls />
-          <div className="min-h-0 flex-1 overflow-y-auto hide-scrollbar pb-mobile-nav">
-            <ListBody activeId={null} />
+      <div className="h-dvh flex flex-col overflow-hidden bg-white dark:bg-card">
+        <div className="flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,var(--header-scrim),transparent)] border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
+          <div
+            className="px-[22px] pb-1"
+            style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}
+          >
+            <h1 className="text-[20px] font-semibold tracking-tight leading-tight text-neutral-900 dark:text-[#f0efed] truncate">
+              Messages
+            </h1>
           </div>
+          <div className="px-[22px] pb-2">
+            <div className="flex items-center gap-3 text-[11px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
+              <span>Guest conversations</span>
+            </div>
+          </div>
+          <div className="px-[22px] pb-1.5 flex items-center">
+            <ListControls />
+          </div>
+          {/* Collapsed to nothing until the search affordance is toggled. */}
+          <ConversationSearchField />
         </div>
-      </MobileRouteShell>
+        <div className="min-h-0 flex-1 overflow-y-auto hide-scrollbar pb-mobile-nav">
+          <ListBody activeId={null} />
+        </div>
+      </div>
     );
   }
 

@@ -316,7 +316,6 @@ function MobileTasksViewContent() {
                 <div key={group.id} className="pt-5">
                   <TaskSectionHeader
                     label={group.label}
-                    count={group.items.length}
                     collapsed={isCollapsed}
                     onToggle={() => toggleSection(group.id)}
                   />
@@ -333,6 +332,7 @@ function MobileTasksViewContent() {
                             item={toRowItem(t)}
                             selected={isSelected}
                             showDateInline={group.kind !== 'day'}
+                            overdue={group.kind === 'overdue'}
                             onClick={() => {
                               if (isSelected) {
                                 setSelectedTask(null);

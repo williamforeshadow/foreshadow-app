@@ -702,7 +702,6 @@ function PropertyTasksViewContent({
                   <div key={group.id} className="pt-5">
                     <TaskSectionHeader
                       label={group.label}
-                      count={group.items.length}
                       collapsed={isCollapsed}
                       onToggle={() => toggleSection(group.id)}
                     />
@@ -730,6 +729,7 @@ function PropertyTasksViewContent({
                                 item={item}
                                 selected={isSelected}
                                 showDateInline={group.kind !== 'day'}
+                                overdue={group.kind === 'overdue'}
                                 onClick={handleClick}
                                 hideProperty
                                 departmentIcon={DeptIcon}

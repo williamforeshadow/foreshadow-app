@@ -131,17 +131,15 @@ export function useCollapsedSections(initial: string[] = ['completed']) {
 }
 
 // ---- TaskSectionHeader ------------------------------------------------------
-// Label on the left, count badge + chevron on the right. One component for
-// desktop and mobile so the five surfaces can't drift.
+// Label on the left, chevron on the right. One component for desktop and
+// mobile so the five surfaces can't drift.
 
 export function TaskSectionHeader({
   label,
-  count,
   collapsed,
   onToggle,
 }: {
   label: string;
-  count: number;
   collapsed: boolean;
   onToggle: () => void;
 }) {
@@ -155,9 +153,6 @@ export function TaskSectionHeader({
         {label}
       </span>
       <span className="flex items-center gap-1.5">
-        <span className="min-w-[22px] px-1.5 py-[1px] rounded-full bg-neutral-100 dark:bg-[rgba(255,255,255,0.06)] text-[10px] font-semibold text-neutral-500 dark:text-[#a09e9a] tabular-nums text-center leading-[16px]">
-          {count}
-        </span>
         <svg
           className={`w-3 h-3 text-neutral-400 dark:text-[#66645f] transition-transform ${
             collapsed ? '-rotate-90' : ''

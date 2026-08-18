@@ -349,7 +349,6 @@ function TasksWindowContent({ isActive = true }: TasksWindowProps) {
                   <div key={group.id} className="pt-5">
                     <TaskSectionHeader
                       label={group.label}
-                      count={group.items.length}
                       collapsed={isCollapsed}
                       onToggle={() => toggleSection(group.id)}
                     />

@@ -15,6 +15,7 @@ import {
   TaskSectionHeader,
   useCollapsedSections,
 } from '@/components/tasks/taskDateSections';
+import { CreateTaskPanel } from '@/components/tasks/create/CreateTaskPanel';
 import { MobileTaskFilterBar } from '@/components/mobile/MobileTaskFilterBar';
 import { LoadingState } from '@/components/ui/loading-state';
 import type {
@@ -156,12 +157,12 @@ export default function MobileMyAssignmentsView({
       0 ||
     !!scheduledDateRange.from ||
     !!scheduledDateRange.to;
-  // "+ New task" hands off to the standalone mobile Tasks page, which
-  // auto-opens its new-task draft detail when the `newTask=1` sentinel is
-  // present.
+  // "+ New task" opens the create panel right here — routing through the
+  // Tasks page flashed that whole tab before the panel appeared.
+  const [creatingOpen, setCreatingOpen] = useState(false);
   const handleNewTask = useCallback(() => {
-    router.push('/tasks?newTask=1');
-  }, [router]);
+    setCreatingOpen(true);
+  }, []);
   const { collapsed: collapsedSections, toggle: toggleSection } =
     useCollapsedSections();
 
@@ -340,7 +341,7 @@ export default function MobileMyAssignmentsView({
     });
   }, [items, search, statusSel, assigneeSel, deptSel, prioritySel, propSel, scheduledDateRange]);
 
-  const { groups, todayTurnoverCount, openCount } = useMemo(() => {
+  const { groups, todayTurnoverCount } = useMemo(() => {
     const todayStr = todayISO();
 
     // Sort the whole list first — grouping preserves order, so this becomes
@@ -393,18 +394,16 @@ export default function MobileMyAssignmentsView({
       );
     }
 
-    let open = 0;
     let turnoverCount = 0;
     for (const item of filteredItems) {
       if (item.status === 'complete') continue;
-      open++;
       // "Turnover" badge counts reservation-bound tasks scheduled today —
       // turnovers are the only path that produces reservation_id-linked
       // tasks, regardless of which template/department spawned them.
       if (item.scheduled_date === todayStr && item.raw?.reservation_id) turnoverCount++;
     }
 
-    return { groups: result, todayTurnoverCount: turnoverCount, openCount: open };
+    return { groups: result, todayTurnoverCount: turnoverCount };
   }, [filteredItems, sortKey, sortDir]);
 
   const todayFormatted = useMemo(() => {
@@ -473,14 +472,12 @@ export default function MobileMyAssignmentsView({
               </svg>
             </button>
           )}
-          <h1 className="text-[20px] font-semibold tracking-tight leading-none text-neutral-900 dark:text-[#f0efed] truncate">
+          <h1 className="text-[20px] font-semibold tracking-tight leading-tight text-neutral-900 dark:text-[#f0efed] truncate">
             My Assignments
           </h1>
         </div>
         <div className="flex items-center gap-3 mt-1 text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
           <span>{todayFormatted}</span>
-          <span className="w-[3px] h-[3px] rounded-full bg-neutral-300 dark:bg-[#3e3d3a]" />
-          <span>{openCount} open</span>
         </div>
       </div>
 
@@ -549,7 +546,6 @@ export default function MobileMyAssignmentsView({
               <div key={group.id} className="px-[22px] pt-5">
                 <TaskSectionHeader
                   label={group.label}
-                  count={group.items.length}
                   collapsed={isCollapsed}
                   onToggle={() => toggleSection(group.id)}
                 />
@@ -572,6 +568,7 @@ export default function MobileMyAssignmentsView({
                           key={item.key}
                           item={item}
                           showDateInline={group.kind !== 'day'}
+                          overdue={group.kind === 'overdue'}
                           onClick={handleRowClick}
                           departmentIcon={dept ? DeptIcon : undefined}
                         />
@@ -584,6 +581,17 @@ export default function MobileMyAssignmentsView({
           })
         )}
       </div>
+
+      {/* Create task — self-renders fixed inset-0 on mobile. */}
+      {creatingOpen && (
+        <CreateTaskPanel
+          onClose={() => setCreatingOpen(false)}
+          onCreated={() => {
+            setCreatingOpen(false);
+            void fetchAssignments();
+          }}
+        />
+      )}
     </div>
   );
 }

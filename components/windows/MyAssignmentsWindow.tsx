@@ -6,6 +6,7 @@ import { useDepartments } from '@/lib/departmentsContext';
 import { getDepartmentIcon } from '@/lib/departmentIcons';
 import type { User, Project, PropertyOccupancy } from '@/lib/types';
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
+import { CreateTaskPanel } from '@/components/tasks/create/CreateTaskPanel';
 import type { TaskDetailInput } from '@/components/tasks/detail/taskInput';
 import { TaskRow, TaskListHeader, taskRowMinWidth } from '@/components/tasks/TaskRow';
 import {
@@ -175,13 +176,9 @@ function MyAssignmentsWindowContent({ currentUser }: MyAssignmentsWindowProps) {
     setSortKey(k);
     setSortDir(d);
   }, []);
-  // "New Task" routes over to the Tasks workspace view with a sentinel
-  // query param. TasksWindow reads it and auto-opens its new-task draft
-  // flow on mount — the assignments page doesn't have its own create flow,
-  // so this hands off to the canonical surface that does.
-  const handleNewTask = useCallback(() => {
-    router.push('/?view=tasks&newTask=1');
-  }, [router]);
+  // "New Task" opens the create panel right here — routing through the
+  // Tasks view flashed that whole tab before the panel appeared.
+  const [creatingOpen, setCreatingOpen] = useState(false);
   const clearAllAssignmentFilters = useCallback(() => {
     setSearch('');
     setStatusSel(new Set());
@@ -229,7 +226,16 @@ function MyAssignmentsWindowContent({ currentUser }: MyAssignmentsWindowProps) {
   //   global → local: close our local panel when context overlays open
   //   local → global: call closeGlobals() before opening our panel so it
   //                   doesn't render behind a still-open context overlay.
-  const closeGlobals = useExclusiveDetailPanelHost(closeSelectedItem);
+  const closeGlobals = useExclusiveDetailPanelHost(() => {
+    closeSelectedItem();
+    setCreatingOpen(false);
+  });
+
+  const handleNewTask = useCallback(() => {
+    closeGlobals();
+    setSelectedItem(null);
+    setCreatingOpen(true);
+  }, [closeGlobals]);
 
   const openAssignmentItem = useCallback(
     (item: UnifiedItem, { syncUrl = true }: { syncUrl?: boolean } = {}) => {
@@ -660,7 +666,6 @@ function MyAssignmentsWindowContent({ currentUser }: MyAssignmentsWindowProps) {
                   <div key={group.id} className="pt-5">
                     <TaskSectionHeader
                       label={group.label}
-                      count={group.items.length}
                       collapsed={isCollapsed}
                       onToggle={() => toggleSection(group.id)}
                     />
@@ -736,6 +741,17 @@ function MyAssignmentsWindowContent({ currentUser }: MyAssignmentsWindowProps) {
             }}
           />
         </div>
+      )}
+
+      {/* Create task — renders its own overlay, so no panel slot. */}
+      {creatingOpen && (
+        <CreateTaskPanel
+          onClose={() => setCreatingOpen(false)}
+          onCreated={() => {
+            setCreatingOpen(false);
+            void fetchAssignments();
+          }}
+        />
       )}
     </div>
   );

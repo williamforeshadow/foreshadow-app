@@ -40,6 +40,9 @@ interface MobileTaskRowProps {
   // Show the scheduled date inline (top-right). For sections whose header
   // doesn't pin down the date — Overdue and Completed hold mixed dates.
   showDateInline?: boolean;
+  // Paint the inline date in the urgent red — for cards in the Overdue
+  // section, where the date IS the problem.
+  overdue?: boolean;
   // Optional department icon component rendered top-right of the body.
   departmentIcon?: React.ComponentType<{ className?: string }>;
 }
@@ -161,6 +164,7 @@ export function MobileTaskRow({
   onClick,
   hideProperty = false,
   showDateInline = false,
+  overdue = false,
   departmentIcon: DeptIcon,
 }: MobileTaskRowProps) {
   const whenLabel = inlineWhenLabel(item, showDateInline);
@@ -194,7 +198,13 @@ export function MobileTaskRow({
         {(whenLabel || showDept) && (
           <div className="flex items-center gap-2 shrink-0 mt-0.5">
             {whenLabel && (
-              <span className="text-[11px] font-medium text-neutral-400 dark:text-[#66645f] tracking-tight tabular-nums whitespace-nowrap">
+              <span
+                className={`text-[11px] font-medium tracking-tight tabular-nums whitespace-nowrap ${
+                  overdue
+                    ? 'text-red-500 dark:text-[#d97757]'
+                    : 'text-neutral-400 dark:text-[#66645f]'
+                }`}
+              >
                 {whenLabel}
               </span>
             )}
