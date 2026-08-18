@@ -35,10 +35,8 @@ import type { TaskDetailInput } from '@/components/tasks/detail/taskInput';
 import { CreateTaskPanel } from '@/components/tasks/create/CreateTaskPanel';
 import { DayDetailPanel } from '@/components/tasks/DayDetailPanel';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
-import {
-  TaskFilterBar,
-  type FilterOption,
-} from '@/components/tasks/TaskFilterBar';
+import { type FilterOption } from '@/components/tasks/TaskFilterBar';
+import { FilterPicker } from '@/components/tasks/TaskPickers';
 import {
   DESKTOP_TIMELINE_DETAIL_PANEL_CLASS,
   DESKTOP_TIMELINE_DETAIL_PANEL_FLEX,
@@ -474,17 +472,8 @@ export default function TimelineWindow({
     setPrioritySel(new Set());
     setPropSel(new Set());
   }, []);
-  const anyFilterActive =
-    !!search.trim() ||
-    statusSel.size +
-      assigneeSel.size +
-      deptSel.size +
-      prioritySel.size +
-      propSel.size >
-      0;
-  // Filter pills are collapsed behind a funnel icon by default to keep the
-  // Timeline header compact; click the icon to expand them inline.
-  const [filtersExpanded, setFiltersExpanded] = useState(false);
+  // Standard drill-in filter picker behind the funnel icon.
+  const [filterOpen, setFilterOpen] = useState(false);
 
   // State for the day detail panel (clicking a day header in the grid view).
   // Kanban access is preserved via the top-left view-mode toggle; clicking a
@@ -1138,44 +1127,46 @@ export default function TimelineWindow({
 
           <CompactSearch value={search} onChange={setSearch} />
 
-          <button
-            type="button"
-            onClick={() => setFiltersExpanded((v) => !v)}
-            title={filtersExpanded ? 'Hide filters' : 'Show filters'}
-            aria-pressed={filtersExpanded}
-            className={`p-1.5 rounded transition-colors ${
-              filtersExpanded || anyFilterActive
-                ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)]'
-                : 'text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-[#1a1a18] dark:hover:text-[#e8e7e3]'
-            }`}
-          >
-            <FilterIcon className="w-4 h-4" />
-          </button>
+          <FilterPicker
+            open={filterOpen}
+            onOpenChange={setFilterOpen}
+            renderTrigger={(activeCount) => (
+              <button
+                type="button"
+                title={filterOpen ? 'Hide filters' : 'Show filters'}
+                aria-pressed={filterOpen}
+                className={`relative p-1.5 rounded transition-colors ${
+                  filterOpen || activeCount > 0
+                    ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)]'
+                    : 'text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-[#1a1a18] dark:hover:text-[#e8e7e3]'
+                }`}
+              >
+                <FilterIcon className="w-4 h-4" />
+                {activeCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[15px] h-[15px] rounded-full bg-[var(--accent-3)] dark:bg-[var(--accent-2)] text-white dark:text-[#1a1a1a] text-[9px] font-semibold tabular-nums px-1">
+                    {activeCount}
+                  </span>
+                )}
+              </button>
+            )}
+            statusOptions={timelineFilterOptions.statuses}
+            statusSelected={statusSel}
+            onStatusChange={setStatusSel}
+            assigneeOptions={timelineFilterOptions.assignees}
+            assigneeSelected={assigneeSel}
+            onAssigneeChange={setAssigneeSel}
+            departmentOptions={timelineFilterOptions.departments}
+            departmentSelected={deptSel}
+            onDepartmentChange={setDeptSel}
+            priorityOptions={timelineFilterOptions.priorities}
+            prioritySelected={prioritySel}
+            onPriorityChange={setPrioritySel}
+            propertyOptions={timelineFilterOptions.propertiesOpt}
+            propertySelected={propSel}
+            onPropertyChange={setPropSel}
+            onClearAll={clearAllFilters}
+          />
 
-          {filtersExpanded && (
-            <TaskFilterBar
-              inline
-              statusOptions={timelineFilterOptions.statuses}
-              statusSelected={statusSel}
-              onStatusChange={setStatusSel}
-              assigneeOptions={timelineFilterOptions.assignees}
-              assigneeSelected={assigneeSel}
-              onAssigneeChange={setAssigneeSel}
-              departmentOptions={timelineFilterOptions.departments}
-              departmentSelected={deptSel}
-              onDepartmentChange={setDeptSel}
-              priorityOptions={timelineFilterOptions.priorities}
-              prioritySelected={prioritySel}
-              onPriorityChange={setPrioritySel}
-              propertyOptions={timelineFilterOptions.propertiesOpt}
-              propertySelected={propSel}
-              onPropertyChange={setPropSel}
-              onClearAll={clearAllFilters}
-              anyFilterActive={anyFilterActive}
-              totalCount={allScheduledTasks.length}
-              filteredCount={displayedScheduledTasks.length}
-            />
-          )}
 
           {/* Right-anchored controls — ml-auto keeps them flush with the
               right edge whether or not the filter pills are expanded inline.

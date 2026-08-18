@@ -2,8 +2,7 @@
 
 import { apiFetch } from '@/lib/apiFetch';
 import { toast } from '@/components/ui/toast';
-import { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef, type SetStateAction } from 'react';
-import { createPortal } from 'react-dom';
+import { useState, useCallback, useMemo, useEffect, useRef, type SetStateAction } from 'react';
 import MobileBinPicker from '@/components/mobile/MobileBinPicker';
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
 import { projectToTaskInput, type TaskDetailInput } from '@/components/tasks/detail/taskInput';
@@ -19,6 +18,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { STATUS_ORDER, STATUS_LABELS, PRIORITY_ORDER, PRIORITY_LABELS } from '@/lib/types';
 import type { ProjectViewMode } from '@/lib/types';
 import { ColumnPicker } from '@/components/windows/projects/ColumnPicker';
+import { BoardsPicker, VIEW_MODE_LABELS } from '@/components/windows/projects/BoardsPicker';
 import type { Project, User } from '@/lib/types';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 import { MobileTaskFilterBar } from '@/components/mobile/MobileTaskFilterBar';
@@ -83,120 +83,6 @@ interface MobileProjectsViewProps {
   onMenuTap?: () => void;
   /** False while the view is kept mounted but hidden behind another tab. */
   isActive?: boolean;
-}
-
-// ============================================================================
-// View Mode Toggle (compact mobile version)
-// ============================================================================
-
-const VIEW_MODE_LABELS: Record<ProjectViewMode, string> = {
-  property: 'Property',
-  status: 'Status',
-  priority: 'Priority',
-  department: 'Dept',
-  assignee: 'Assignee',
-};
-
-const ALL_VIEW_MODES: ProjectViewMode[] = ['property', 'status', 'priority', 'department', 'assignee'];
-
-function MobileViewModeToggle({
-  viewMode,
-  setViewMode,
-}: {
-  viewMode: ProjectViewMode;
-  setViewMode: (m: ProjectViewMode) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const popRef = useRef<HTMLDivElement>(null);
-  // Portal the dropdown to <body> so it escapes the filter lane's
-  // `overflow-x-auto` clip (the lane is what makes the pills swipeable).
-  const [mounted, setMounted] = useState(false);
-  const [pos, setPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
-
-  useEffect(() => setMounted(true), []);
-
-  useLayoutEffect(() => {
-    if (!open) return;
-    const update = () => {
-      const el = triggerRef.current;
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      const gutter = 8;
-      const w = popRef.current?.offsetWidth ?? 140;
-      const left = Math.min(r.left, Math.max(gutter, window.innerWidth - w - gutter));
-      setPos({ left, top: r.bottom + 6 });
-    };
-    update();
-    window.addEventListener('resize', update);
-    window.addEventListener('scroll', update, true);
-    return () => {
-      window.removeEventListener('resize', update);
-      window.removeEventListener('scroll', update, true);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onTap = (e: MouseEvent | TouchEvent) => {
-      const t = e.target as Node;
-      if (triggerRef.current?.contains(t)) return;
-      if (popRef.current?.contains(t)) return;
-      setOpen(false);
-    };
-    document.addEventListener('mousedown', onTap);
-    document.addEventListener('touchstart', onTap);
-    return () => {
-      document.removeEventListener('mousedown', onTap);
-      document.removeEventListener('touchstart', onTap);
-    };
-  }, [open]);
-
-  return (
-    <>
-      {/* Standard pill — single-select board orientation. The chosen mode is
-          surfaced in the header fine print ("By Status"), not inside the
-          pill, so the label stays a clean "Boards". */}
-      <button
-        ref={triggerRef}
-        onClick={() => setOpen((v) => !v)}
-        className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium border bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)] active:opacity-70 transition-opacity"
-      >
-        Boards
-        <svg className={`w-3 h-3 opacity-50 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-
-      {open && mounted && createPortal(
-        <div
-          ref={popRef}
-          style={{ position: 'fixed', left: pos.left, top: pos.top, zIndex: 9999 }}
-          className="rounded-xl bg-white dark:bg-[#1a1a1d] border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] shadow-xl min-w-[140px]"
-        >
-          <div className="flex flex-col gap-0.5 p-1.5">
-            {ALL_VIEW_MODES.map((mode) => (
-              <button
-                key={mode}
-                onClick={() => {
-                  setViewMode(mode);
-                  setOpen(false);
-                }}
-                className={`px-3.5 py-2 text-[12px] font-medium rounded-lg text-left transition-all ${
-                  viewMode === mode
-                    ? 'bg-neutral-100 dark:bg-[rgba(255,255,255,0.06)] text-neutral-900 dark:text-[#f0efed]'
-                    : 'text-neutral-500 dark:text-[#66645f] active:bg-neutral-50 dark:active:bg-[rgba(255,255,255,0.03)]'
-                }`}
-              >
-                {VIEW_MODE_LABELS[mode]}
-              </button>
-            ))}
-          </div>
-        </div>,
-        document.body
-      )}
-    </>
-  );
 }
 
 // ============================================================================
@@ -696,7 +582,7 @@ export default function MobileProjectsView({ users, onMenuTap, isActive = true }
               filteredCount={filteredTasks.length}
               laneControls={
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <MobileViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
+                  <BoardsPicker viewMode={viewMode} setViewMode={setViewMode} />
                   <ColumnPicker
                     columns={allColumnOptions}
                     visibleColumnIds={columnVis.visibleIds}

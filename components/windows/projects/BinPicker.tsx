@@ -3,6 +3,8 @@
 import { useState, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/loading-state';
+import { AdaptivePicker } from '@/components/tasks/detail/primitives/AdaptivePicker';
+import { TaskOptionRow } from '@/components/tasks/detail/primitives/TaskSheet';
 import { cn } from '@/lib/utils';
 import type { ProjectBin } from '@/lib/types';
 
@@ -152,28 +154,43 @@ export function BinPicker({
             className={cn(
               'group relative flex flex-col justify-between p-5 rounded-xl border transition-all duration-200 text-left min-h-[140px] cursor-pointer',
               'border-neutral-200 bg-neutral-100 hover:bg-neutral-200/70 hover:border-neutral-300',
-              'dark:border-white/10 dark:bg-white/[0.06] dark:backdrop-blur-md dark:hover:bg-white/[0.10] dark:hover:border-white/20',
-              // Lift the card above the context-menu close overlay (z-10) so clicks
-              // reach the dropdown. Without this, `backdrop-blur-md` creates a new
-              // stacking context and the overlay ends up on top of the dropdown.
-              systemBin && contextMenuBinId === systemBin.id && 'z-20'
+              'dark:border-white/10 dark:bg-white/[0.06] dark:backdrop-blur-md dark:hover:bg-white/[0.10] dark:hover:border-white/20'
             )}
           >
-            {/* ⋯ menu button — visible on hover, only when we have a system bin row to configure */}
+            {/* ⋯ menu — visible on hover, only when we have a system bin row to
+                configure. Standard picker surface (popover / drawer). */}
             {systemBin && (
               <div
                 className="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity"
                 onClick={(e) => e.stopPropagation()}
               >
-                <button
-                  onClick={() => setContextMenuBinId(contextMenuBinId === systemBin.id ? null : systemBin.id)}
-                  className="p-1 rounded-md hover:bg-neutral-300/50 dark:hover:bg-white/10 transition-colors"
-                  title="Auto-dismiss options"
+                <AdaptivePicker
+                  open={contextMenuBinId === systemBin.id}
+                  onOpenChange={(v) => setContextMenuBinId(v ? systemBin.id : null)}
+                  title="Task Bin"
+                  align="end"
+                  trigger={
+                    <button
+                      className="p-1 rounded-md hover:bg-neutral-300/50 dark:hover:bg-white/10 transition-colors"
+                      title="Auto-dismiss options"
+                    >
+                      <svg className="w-4 h-4 text-neutral-500 dark:text-white/40" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                    </button>
+                  }
                 >
-                  <svg className="w-4 h-4 text-neutral-500 dark:text-white/40" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                </button>
+                  <div className="pb-1">
+                    <TaskOptionRow
+                      onSelect={() => {
+                        openSettings(systemBin);
+                        setContextMenuBinId(null);
+                      }}
+                    >
+                      Settings
+                    </TaskOptionRow>
+                  </div>
+                </AdaptivePicker>
               </div>
             )}
 
@@ -199,23 +216,6 @@ export function BinPicker({
               </svg>
             </div>
 
-            {/* Context menu dropdown — system bin only has Settings */}
-            {systemBin && contextMenuBinId === systemBin.id && (
-              <div
-                className="absolute top-10 right-3 z-20 bg-white dark:bg-card/90 dark:backdrop-blur-xl border border-neutral-200 dark:border-white/10 rounded-lg shadow-lg dark:shadow-2xl py-1 min-w-[140px]"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <button
-                  className="w-full text-left px-3 py-1.5 text-xs text-neutral-700 dark:text-white/70 hover:bg-neutral-100 dark:hover:bg-white/10 transition-colors"
-                  onClick={() => {
-                    openSettings(systemBin);
-                    setContextMenuBinId(null);
-                  }}
-                >
-                  Settings
-                </button>
-              </div>
-            )}
           </div>
 
           {/* Individual Sub-Bin Cards */}
@@ -229,26 +229,51 @@ export function BinPicker({
               className={cn(
                 'group relative flex flex-col justify-between p-5 rounded-xl border transition-all duration-200 text-left min-h-[140px] cursor-pointer',
                 'border-neutral-200 bg-neutral-100 hover:bg-neutral-200/70 hover:border-neutral-300',
-                'dark:border-white/10 dark:bg-white/[0.06] dark:backdrop-blur-md dark:hover:bg-white/[0.10] dark:hover:border-white/20',
-                // Same fix as above: lift the card above the close overlay
-                // while its context menu is open so the buttons are clickable.
-                contextMenuBinId === bin.id && 'z-20'
+                'dark:border-white/10 dark:bg-white/[0.06] dark:backdrop-blur-md dark:hover:bg-white/[0.10] dark:hover:border-white/20'
               )}
             >
-              {/* ⋯ menu button — visible on hover */}
+              {/* ⋯ menu — visible on hover. Standard picker surface. */}
               <div
                 className="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity"
                 onClick={(e) => e.stopPropagation()}
               >
-                <button
-                  onClick={() => setContextMenuBinId(contextMenuBinId === bin.id ? null : bin.id)}
-                  className="p-1 rounded-md hover:bg-neutral-300/50 dark:hover:bg-white/10 transition-colors"
-                  title="Sub-bin options"
+                <AdaptivePicker
+                  open={contextMenuBinId === bin.id}
+                  onOpenChange={(v) => setContextMenuBinId(v ? bin.id : null)}
+                  title={bin.name}
+                  align="end"
+                  trigger={
+                    <button
+                      className="p-1 rounded-md hover:bg-neutral-300/50 dark:hover:bg-white/10 transition-colors"
+                      title="Sub-bin options"
+                    >
+                      <svg className="w-4 h-4 text-neutral-500 dark:text-white/40" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                    </button>
+                  }
                 >
-                  <svg className="w-4 h-4 text-neutral-500 dark:text-white/40" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                </button>
+                  <div className="pb-1">
+                    <TaskOptionRow
+                      onSelect={() => {
+                        openSettings(bin);
+                        setContextMenuBinId(null);
+                      }}
+                    >
+                      Settings
+                    </TaskOptionRow>
+                    <TaskOptionRow
+                      onSelect={() => {
+                        if (confirm(`Delete sub-bin "${bin.name}"? Tasks will remain in the Task Bin.`)) {
+                          onDeleteBin(bin.id);
+                        }
+                        setContextMenuBinId(null);
+                      }}
+                    >
+                      <span className="text-red-600 dark:text-[#d97757]">Delete</span>
+                    </TaskOptionRow>
+                  </div>
+                </AdaptivePicker>
               </div>
 
               <div>
@@ -275,34 +300,6 @@ export function BinPicker({
                 </svg>
               </div>
 
-              {/* Context menu dropdown */}
-              {contextMenuBinId === bin.id && (
-                <div
-                  className="absolute top-10 right-3 z-20 bg-white dark:bg-card/90 dark:backdrop-blur-xl border border-neutral-200 dark:border-white/10 rounded-lg shadow-lg dark:shadow-2xl py-1 min-w-[140px]"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <button
-                    className="w-full text-left px-3 py-1.5 text-xs text-neutral-700 dark:text-white/70 hover:bg-neutral-100 dark:hover:bg-white/10 transition-colors"
-                    onClick={() => {
-                      openSettings(bin);
-                      setContextMenuBinId(null);
-                    }}
-                  >
-                    Settings
-                  </button>
-                  <button
-                    className="w-full text-left px-3 py-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-neutral-100 dark:hover:bg-white/10 transition-colors"
-                    onClick={() => {
-                      if (confirm(`Delete sub-bin "${bin.name}"? Tasks will remain in the Task Bin.`)) {
-                        onDeleteBin(bin.id);
-                      }
-                      setContextMenuBinId(null);
-                    }}
-                  >
-                    Delete
-                  </button>
-                </div>
-              )}
             </div>
           ))}
 
@@ -367,14 +364,6 @@ export function BinPicker({
           </div>
         )}
       </div>
-
-      {/* Close context menu on click outside */}
-      {contextMenuBinId && (
-        <div
-          className="fixed inset-0 z-10"
-          onClick={() => setContextMenuBinId(null)}
-        />
-      )}
 
       {/* Settings modal */}
       {settingsBinId && (

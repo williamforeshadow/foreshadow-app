@@ -17,6 +17,7 @@ export function AdaptivePicker({
   children,
   align = 'start',
   contentClassName,
+  scrollAreaClassName = 'max-h-72',
   disabled,
 }: {
   open: boolean;
@@ -26,6 +27,9 @@ export function AdaptivePicker({
   children: React.ReactNode;
   align?: 'start' | 'center' | 'end';
   contentClassName?: string;
+  /** Height cap for the desktop popover's scroll region. Taller pickers
+   *  (the filter drill-in) pass a bigger cap. */
+  scrollAreaClassName?: string;
   disabled?: boolean;
 }) {
   const isMobile = useIsMobile();
@@ -64,7 +68,7 @@ export function AdaptivePicker({
         >
           {title}
         </div>
-        <div className="max-h-72 overflow-y-auto">{children}</div>
+        <div className={`${scrollAreaClassName} overflow-y-auto`}>{children}</div>
       </PopoverContent>
     </Popover>
   );

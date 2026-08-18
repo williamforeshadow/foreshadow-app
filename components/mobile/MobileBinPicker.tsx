@@ -3,6 +3,7 @@
 import { useState, memo, useMemo } from 'react';
 import type { ProjectBin } from '@/lib/types';
 import { LoadingState } from '@/components/ui/loading-state';
+import { TaskSheet, TaskOptionRow } from '@/components/tasks/detail/primitives/TaskSheet';
 import { useEditableKeyboardOverlay } from '@/lib/useEditableKeyboardOverlay';
 
 interface MobileBinPickerProps {
@@ -304,23 +305,21 @@ const MobileBinPicker = memo(function MobileBinPicker({
             </button>
           )}
 
-          {/* Dropdown menu for system bin — only Edit (no Delete) */}
-          {systemMenuOpen && systemBin && (
-            <>
-              <div className="fixed inset-0 z-[39]" onClick={() => setMenuBinId(null)} />
-              <div className="absolute top-10 right-2 z-40 min-w-[140px] py-1 rounded-xl bg-white dark:bg-[#1a1a1d] border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] shadow-xl">
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleStartEdit(systemBin); }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
+          {/* Standard drawer for the system bin's menu — only Settings (no Delete) */}
+          {systemBin && (
+            <TaskSheet
+              open={systemMenuOpen}
+              onOpenChange={(v) => {
+                if (!v) setMenuBinId(null);
+              }}
+              title="Task Bin"
+            >
+              <div className="pb-1">
+                <TaskOptionRow onSelect={() => handleStartEdit(systemBin)}>
                   Settings
-                </button>
+                </TaskOptionRow>
               </div>
-            </>
+            </TaskSheet>
           )}
         </div>
       )}
@@ -459,56 +458,52 @@ const MobileBinPicker = memo(function MobileBinPicker({
                   </button>
                 )}
 
-                {/* Dropdown menu */}
-                {isMenuOpen && (
-                  <>
-                    <div className="fixed inset-0 z-[39]" onClick={() => { setMenuBinId(null); setConfirmDeleteId(null); }} />
-                    <div className="absolute top-10 right-2 z-40 min-w-[140px] py-1 rounded-xl bg-white dark:bg-[#1a1a1d] border border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)] shadow-xl">
-                      {onUpdateBin && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleStartEdit(bin); }}
-                          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                          Edit
-                        </button>
-                      )}
-                      {onDeleteBin && !isConfirmingDelete && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(bin.id); }}
-                          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                          Delete
-                        </button>
-                      )}
-                      {isConfirmingDelete && (
-                        <div className="px-3 py-2 flex flex-col gap-1.5">
-                          <p className="text-xs text-red-500 font-medium">Delete this sub-bin?</p>
-                          <p className="text-[11px] text-neutral-500">Tasks will remain in the Task Bin.</p>
-                          <div className="flex gap-2 pt-1">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleDelete(bin.id); }}
-                              className="text-xs font-medium px-2.5 py-1 rounded-md bg-red-500 text-white active:bg-red-600 transition-colors"
-                            >
-                              Delete
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null); }}
-                              className="text-xs text-neutral-400 px-2 py-1"
-                            >
-                              Cancel
-                            </button>
-                          </div>
+                {/* Standard drawer for the sub-bin's menu. Delete is a
+                    two-step confirm inside the same sheet. */}
+                <TaskSheet
+                  open={isMenuOpen}
+                  onOpenChange={(v) => {
+                    if (!v) {
+                      setMenuBinId(null);
+                      setConfirmDeleteId(null);
+                    }
+                  }}
+                  title={bin.name}
+                >
+                  <div className="pb-1">
+                    {!isConfirmingDelete ? (
+                      <>
+                        {onUpdateBin && (
+                          <TaskOptionRow onSelect={() => handleStartEdit(bin)}>
+                            Edit
+                          </TaskOptionRow>
+                        )}
+                        {onDeleteBin && (
+                          <TaskOptionRow onSelect={() => setConfirmDeleteId(bin.id)}>
+                            <span className="text-red-500 dark:text-[#d97757]">Delete</span>
+                          </TaskOptionRow>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <div className="px-2.5 pb-2">
+                          <p className="text-[14px] font-medium text-red-500 dark:text-[#d97757]">
+                            Delete this sub-bin?
+                          </p>
+                          <p className="mt-0.5 text-[12px]" style={{ color: 'var(--task-ink-3)' }}>
+                            Tasks will remain in the Task Bin.
+                          </p>
                         </div>
-                      )}
-                    </div>
-                  </>
-                )}
+                        <TaskOptionRow onSelect={() => handleDelete(bin.id)}>
+                          <span className="text-red-500 dark:text-[#d97757]">Delete sub-bin</span>
+                        </TaskOptionRow>
+                        <TaskOptionRow onSelect={() => setConfirmDeleteId(null)}>
+                          Cancel
+                        </TaskOptionRow>
+                      </>
+                    )}
+                  </div>
+                </TaskSheet>
               </div>
             );
           })}

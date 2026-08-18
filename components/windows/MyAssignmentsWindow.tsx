@@ -15,12 +15,15 @@ import {
   useCollapsedSections,
 } from '@/components/tasks/taskDateSections';
 import {
-  TaskFilterBar,
-  SortSelect,
   type FilterOption,
   type SortKey,
   type SortDir,
 } from '@/components/tasks/TaskFilterBar';
+import {
+  FilterPicker,
+  SortPicker,
+  SORT_KEY_LABELS,
+} from '@/components/tasks/TaskPickers';
 import { CompactSearch } from '@/components/ui/compact-search';
 import { LoadingState } from '@/components/ui/loading-state';
 import { Filter as FilterIcon } from 'lucide-react';
@@ -159,7 +162,8 @@ function MyAssignmentsWindowContent({ currentUser }: MyAssignmentsWindowProps) {
   // here; the chip lane is collapsed behind a funnel by default.
   const NO_DEPT = '__no_department__';
   const NO_BIN = '__no_bin__';
-  const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [statusSel, setStatusSel] = useState<Set<string>>(new Set());
   const [assigneeSel, setAssigneeSel] = useState<Set<string>>(new Set());
@@ -189,17 +193,6 @@ function MyAssignmentsWindowContent({ currentUser }: MyAssignmentsWindowProps) {
     setBinSel(new Set());
     setScheduledDateRange({ from: null, to: null });
   }, []);
-  const anyAssignmentFilterActive =
-    !!search.trim() ||
-    statusSel.size +
-      assigneeSel.size +
-      deptSel.size +
-      prioritySel.size +
-      propSel.size +
-      binSel.size >
-      0 ||
-    !!scheduledDateRange.from ||
-    !!scheduledDateRange.to;
   const openTaskParam = searchParams?.get('openTask') ?? null;
   const pendingOpenTaskParamRef = useRef<string | null>(null);
 
@@ -559,60 +552,74 @@ function MyAssignmentsWindowContent({ currentUser }: MyAssignmentsWindowProps) {
               placeholder="Search assignments…"
             />
 
-            <button
-              type="button"
-              onClick={() => setFiltersExpanded((v) => !v)}
-              title={filtersExpanded ? 'Hide filters' : 'Show filters'}
-              aria-pressed={filtersExpanded}
-              className={`flex-shrink-0 p-1.5 rounded transition-colors ${
-                filtersExpanded || anyAssignmentFilterActive
-                  ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)]'
-                  : 'text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-[#1a1a18] dark:hover:text-[#e8e7e3]'
-              }`}
-            >
-              <FilterIcon className="w-4 h-4" />
-            </button>
+            <FilterPicker
+              open={filterOpen}
+              onOpenChange={setFilterOpen}
+              renderTrigger={(activeCount) => (
+                <button
+                  type="button"
+                  title={filterOpen ? 'Hide filters' : 'Show filters'}
+                  aria-pressed={filterOpen}
+                  className={`relative flex-shrink-0 p-1.5 rounded transition-colors ${
+                    filterOpen || activeCount > 0
+                      ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)]'
+                      : 'text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-[#1a1a18] dark:hover:text-[#e8e7e3]'
+                  }`}
+                >
+                  <FilterIcon className="w-4 h-4" />
+                  {activeCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[15px] h-[15px] rounded-full bg-[var(--accent-3)] dark:bg-[var(--accent-2)] text-white dark:text-[#1a1a1a] text-[9px] font-semibold tabular-nums px-1">
+                      {activeCount}
+                    </span>
+                  )}
+                </button>
+              )}
+              statusOptions={assignmentFilterOptions.statuses}
+              statusSelected={statusSel}
+              onStatusChange={setStatusSel}
+              // Co-assignee filter — every row is assigned to the current
+              // user; this narrows to tasks shared with a specific teammate.
+              assigneeOptions={assignmentFilterOptions.assignees}
+              assigneeSelected={assigneeSel}
+              onAssigneeChange={setAssigneeSel}
+              departmentOptions={assignmentFilterOptions.departments}
+              departmentSelected={deptSel}
+              onDepartmentChange={setDeptSel}
+              binOptions={assignmentFilterOptions.binsOpt}
+              binSelected={binSel}
+              onBinChange={setBinSel}
+              priorityOptions={assignmentFilterOptions.priorities}
+              prioritySelected={prioritySel}
+              onPriorityChange={setPrioritySel}
+              propertyOptions={assignmentFilterOptions.propertiesOpt}
+              propertySelected={propSel}
+              onPropertyChange={setPropSel}
+              scheduledDateRange={scheduledDateRange}
+              onScheduledDateRangeChange={setScheduledDateRange}
+              onClearAll={clearAllAssignmentFilters}
+            />
 
-            {filtersExpanded && (
-              <TaskFilterBar
-                inline
-                statusOptions={assignmentFilterOptions.statuses}
-                statusSelected={statusSel}
-                onStatusChange={setStatusSel}
-                // Co-assignee filter — every row is assigned to the current
-                // user; this narrows to tasks shared with a specific teammate.
-                assigneeOptions={assignmentFilterOptions.assignees}
-                assigneeSelected={assigneeSel}
-                onAssigneeChange={setAssigneeSel}
-                departmentOptions={assignmentFilterOptions.departments}
-                departmentSelected={deptSel}
-                onDepartmentChange={setDeptSel}
-                binOptions={assignmentFilterOptions.binsOpt}
-                binSelected={binSel}
-                onBinChange={setBinSel}
-                priorityOptions={assignmentFilterOptions.priorities}
-                prioritySelected={prioritySel}
-                onPriorityChange={setPrioritySel}
-                propertyOptions={assignmentFilterOptions.propertiesOpt}
-                propertySelected={propSel}
-                onPropertyChange={setPropSel}
-                scheduledDateRange={scheduledDateRange}
-                onScheduledDateRangeChange={setScheduledDateRange}
-                onClearAll={clearAllAssignmentFilters}
-                anyFilterActive={anyAssignmentFilterActive}
-                totalCount={items.length}
-                filteredCount={filteredItems.length}
-              />
-            )}
-
-            {/* Right-anchored: Sort + New Task. Always visible regardless of
-                whether the filter pills are expanded — matches the Tasks
-                page layout. */}
+            {/* Right-anchored: Sort + New Task — matches the Tasks page
+                layout. */}
             <div className="ml-auto flex items-center gap-2 flex-shrink-0">
-              <SortSelect
+              <SortPicker
+                open={sortOpen}
+                onOpenChange={setSortOpen}
                 sortKey={sortKey}
                 sortDir={sortDir}
                 onChange={handleSortChange}
+                trigger={
+                  <button className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium border bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-neutral-800 dark:hover:text-[#f0efed] transition-colors">
+                    <span className="text-neutral-400 dark:text-[#66645f]">Sort:</span>
+                    <span>{SORT_KEY_LABELS[sortKey]}</span>
+                    <span className="text-neutral-400 dark:text-[#66645f]">
+                      {sortDir === 'asc' ? '↑' : '↓'}
+                    </span>
+                    <svg className="w-3 h-3 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                }
               />
               <button
                 onClick={handleNewTask}

@@ -2,7 +2,7 @@
 
 import { apiFetch } from '@/lib/apiFetch';
 import { toast } from '@/components/ui/toast';
-import { memo, useCallback, useState, useEffect, useMemo, useRef, type SetStateAction } from 'react';
+import { memo, useCallback, useState, useEffect, useMemo, type SetStateAction } from 'react';
 import { Button } from '@/components/ui/button';
 import type { ProjectViewMode, ProjectBin } from '@/lib/types';
 import { STATUS_LABELS, STATUS_ORDER, PRIORITY_LABELS, PRIORITY_ORDER } from '@/lib/types';
@@ -13,6 +13,7 @@ import { useProperties, fetchJson, qk } from '@/lib/queries';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { BinPicker } from './projects';
 import { ColumnPicker } from './projects/ColumnPicker';
+import { BoardsPicker } from './projects/BoardsPicker';
 import { ProjectsKanban } from './projects/ProjectsKanban';
 import { useDepartments } from '@/lib/departmentsContext';
 import { DESKTOP_TASK_PANEL_SLOT } from '@/lib/detailPanelGeometry';
@@ -28,80 +29,6 @@ import { TaskFilterBar, type FilterOption } from '@/components/tasks/TaskFilterB
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
 import { projectToTaskInput, type TaskDetailInput } from '@/components/tasks/detail/taskInput';
 import { CreateTaskPanel } from '@/components/tasks/create/CreateTaskPanel';
-
-// ============================================================================
-// View Mode Toggle — compact pill that expands on click
-// ============================================================================
-
-const VIEW_MODE_LABELS: Record<ProjectViewMode, string> = {
-  property: 'Property',
-  status: 'Status',
-  priority: 'Priority',
-  department: 'Dept',
-  assignee: 'Assignee',
-};
-
-const ALL_VIEW_MODES: ProjectViewMode[] = ['property', 'status', 'priority', 'department', 'assignee'];
-
-function ViewModeToggle({
-  viewMode,
-  setViewMode,
-}: {
-  viewMode: ProjectViewMode;
-  setViewMode: (m: ProjectViewMode) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  // Pill aesthetic shared with the schedule-page filter chips. Single-select
-  // (one board orientation at a time) — label stays "Boards" with the current
-  // mode rendered as a `· summary` tail so the visual matches MultiSelect.
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium border transition-colors bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-neutral-800 dark:hover:text-[#f0efed]"
-      >
-        <span>Boards</span>
-        <svg className={`w-3 h-3 opacity-60 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-
-      {open && (
-        <div className="absolute right-0 top-full mt-1.5 z-50 min-w-[160px] rounded-lg border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] bg-white dark:bg-[#1a1a1a] shadow-lg py-1">
-          {ALL_VIEW_MODES.map((mode) => (
-            <button
-              key={mode}
-              onClick={() => {
-                setViewMode(mode);
-                setOpen(false);
-              }}
-              className={`w-full px-3 py-1.5 text-left text-[12px] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] ${
-                viewMode === mode
-                  ? 'text-[var(--accent-3)] dark:text-[var(--accent-1)] font-medium'
-                  : 'text-neutral-700 dark:text-[#f0efed]'
-              }`}
-            >
-              {VIEW_MODE_LABELS[mode]}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ============================================================================
 
@@ -728,7 +655,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
                 select. `ml-auto` pins them to the right of the controls row;
                 `flex-shrink-0` guards against the chip lane crushing them. */}
             <div className="ml-auto flex items-center gap-3 flex-shrink-0">
-            <ViewModeToggle viewMode={viewMode} setViewMode={setViewMode} />
+            <BoardsPicker viewMode={viewMode} setViewMode={setViewMode} />
             <ColumnPicker
               columns={allColumnOptions}
               visibleColumnIds={columnVis.visibleIds}

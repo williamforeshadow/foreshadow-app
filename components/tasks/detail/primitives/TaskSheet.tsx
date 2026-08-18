@@ -46,6 +46,12 @@ export function TaskSheet({
     void setChatKeyboardOverlay(true);
     return () => void setChatKeyboardOverlay(false);
   }, [open]);
+
+  // While the keyboard has the sheet lifted, the 65vh content cap no longer
+  // fits — bottom inset + full-height sheet pushes the top past the notch.
+  // Cap the WHOLE sheet to the strip left above the keyboard instead.
+  const lifted = kb.typing && kb.keyboardInset > 0;
+
   return (
     <Drawer.Root open={open} onOpenChange={onOpenChange} repositionInputs={false}>
       <Drawer.Portal>
@@ -58,7 +64,10 @@ export function TaskSheet({
           style={{
             background: 'var(--task-surface-1)',
             borderColor: 'var(--task-line)',
-            bottom: kb.typing && kb.keyboardInset > 0 ? kb.keyboardInset : 0,
+            bottom: lifted ? kb.keyboardInset : 0,
+            maxHeight: lifted
+              ? `calc(100dvh - ${kb.keyboardInset}px - env(safe-area-inset-top) - 12px)`
+              : undefined,
           }}
           // Radix focuses the first focusable element on open — in a sheet with
           // a search field that means the keyboard erupts (and races the
@@ -79,8 +88,12 @@ export function TaskSheet({
               {title}
             </div>
           </Drawer.Title>
+          {/* flex-1 min-h-0 lets this scroll region COMPRESS when the lifted
+              sheet's maxHeight bites; with an auto-height sheet (the normal
+              case) flex-grow has no free space to hand out, so the 65vh cap
+              still governs. */}
           <div
-            className="px-[18px] pb-[calc(1.75rem+env(safe-area-inset-bottom))] max-h-[65vh] overflow-y-auto"
+            className="px-[18px] pb-[calc(1.75rem+env(safe-area-inset-bottom))] max-h-[65vh] flex-1 min-h-0 overflow-y-auto"
           >
             {children}
           </div>
