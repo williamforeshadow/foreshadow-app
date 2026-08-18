@@ -25,7 +25,8 @@ import { Filter as FilterIcon } from 'lucide-react';
 import { CompactSearch } from '@/components/ui/compact-search';
 import { WindowHeader } from '@/components/ui/window-header';
 import { LoadingState } from '@/components/ui/loading-state';
-import { TaskFilterBar, type FilterOption } from '@/components/tasks/TaskFilterBar';
+import { type FilterOption } from '@/components/tasks/TaskFilterBar';
+import { FilterPicker } from '@/components/tasks/TaskPickers';
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
 import { projectToTaskInput, type TaskDetailInput } from '@/components/tasks/detail/taskInput';
 import { CreateTaskPanel } from '@/components/tasks/create/CreateTaskPanel';
@@ -169,7 +170,7 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
   // controlled here; pills are rendered behind a funnel toggle so the header
   // stays compact when nothing's filtered.
   const NO_DEPT = '__no_department__';
-  const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [statusSel, setStatusSel] = useState<Set<string>>(new Set());
   const [assigneeSel, setAssigneeSel] = useState<Set<string>>(new Set());
@@ -188,16 +189,6 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
     setPropSel(new Set());
     setScheduledDateRange({ from: null, to: null });
   }, []);
-  const anyTaskFilterActive =
-    !!search.trim() ||
-    statusSel.size +
-      assigneeSel.size +
-      deptSel.size +
-      prioritySel.size +
-      propSel.size >
-      0 ||
-    !!scheduledDateRange.from ||
-    !!scheduledDateRange.to;
 
   // UI state
   const [expandedProject, setExpandedProject] = useState<Project | null>(null);
@@ -610,46 +601,47 @@ function ProjectsWindowContent({ users, currentUser }: ProjectsWindowProps) {
             {/* Task search + filter pills (matches the Schedule page UX) */}
             <CompactSearch value={search} onChange={setSearch} placeholder="Search tasks…" />
 
-            <button
-              type="button"
-              onClick={() => setFiltersExpanded((v) => !v)}
-              title={filtersExpanded ? 'Hide filters' : 'Show filters'}
-              aria-pressed={filtersExpanded}
-              className={`flex-shrink-0 p-1.5 rounded transition-colors ${
-                filtersExpanded || anyTaskFilterActive
-                  ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)]'
-                  : 'text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-[#1a1a18] dark:hover:text-[#e8e7e3]'
-              }`}
-            >
-              <FilterIcon className="w-4 h-4" />
-            </button>
-
-            {filtersExpanded && (
-              <TaskFilterBar
-                inline
-                statusOptions={binFilterOptions.statuses}
-                statusSelected={statusSel}
-                onStatusChange={setStatusSel}
-                assigneeOptions={binFilterOptions.assignees}
-                assigneeSelected={assigneeSel}
-                onAssigneeChange={setAssigneeSel}
-                departmentOptions={binFilterOptions.departments}
-                departmentSelected={deptSel}
-                onDepartmentChange={setDeptSel}
-                priorityOptions={binFilterOptions.priorities}
-                prioritySelected={prioritySel}
-                onPriorityChange={setPrioritySel}
-                propertyOptions={binFilterOptions.propertiesOpt}
-                propertySelected={propSel}
-                onPropertyChange={setPropSel}
-                scheduledDateRange={scheduledDateRange}
-                onScheduledDateRangeChange={setScheduledDateRange}
-                onClearAll={clearAllTaskFilters}
-                anyFilterActive={anyTaskFilterActive}
-                totalCount={tasks.length}
-                filteredCount={filteredTasks.length}
-              />
-            )}
+            <FilterPicker
+              open={filterOpen}
+              onOpenChange={setFilterOpen}
+              renderTrigger={(activeCount) => (
+                <button
+                  type="button"
+                  title={filterOpen ? 'Hide filters' : 'Show filters'}
+                  aria-pressed={filterOpen}
+                  className={`relative flex-shrink-0 p-1.5 rounded transition-colors ${
+                    filterOpen || activeCount > 0
+                      ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)]'
+                      : 'text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-[#1a1a18] dark:hover:text-[#e8e7e3]'
+                  }`}
+                >
+                  <FilterIcon className="w-4 h-4" />
+                  {activeCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[15px] h-[15px] rounded-full bg-[var(--accent-3)] dark:bg-[var(--accent-2)] text-white dark:text-[#1a1a1a] text-[9px] font-semibold tabular-nums px-1">
+                      {activeCount}
+                    </span>
+                  )}
+                </button>
+              )}
+              statusOptions={binFilterOptions.statuses}
+              statusSelected={statusSel}
+              onStatusChange={setStatusSel}
+              assigneeOptions={binFilterOptions.assignees}
+              assigneeSelected={assigneeSel}
+              onAssigneeChange={setAssigneeSel}
+              departmentOptions={binFilterOptions.departments}
+              departmentSelected={deptSel}
+              onDepartmentChange={setDeptSel}
+              priorityOptions={binFilterOptions.priorities}
+              prioritySelected={prioritySel}
+              onPriorityChange={setPrioritySel}
+              propertyOptions={binFilterOptions.propertiesOpt}
+              propertySelected={propSel}
+              onPropertyChange={setPropSel}
+              scheduledDateRange={scheduledDateRange}
+              onScheduledDateRangeChange={setScheduledDateRange}
+              onClearAll={clearAllTaskFilters}
+            />
 
             {/* Right group: board orientation + column visibility + new task +
                 select. `ml-auto` pins them to the right of the controls row;
