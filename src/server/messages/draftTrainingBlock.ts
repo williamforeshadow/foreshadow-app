@@ -1,5 +1,5 @@
-import type { MessageParam, TextBlock } from '@anthropic-ai/sdk/resources/messages';
-import { getAnthropic, MODEL } from '@/src/agent/anthropic';
+import type { BetaTextBlock as TextBlock } from '@anthropic-ai/sdk/resources/beta/messages';
+import { createModelMessage } from '@/src/agent/modelProvider';
 import { getConversationContext } from './conversationContext';
 import type { TrainingTier, TrainingCategory } from './conciergeTraining';
 
@@ -15,7 +15,9 @@ import type { TrainingTier, TrainingCategory } from './conciergeTraining';
 // from the selected messages here; the model writes the title/instructions/label
 // but never the transcript, so an example can never misquote what a guest said.
 
-const STRUCTURE_MAX_TOKENS = 800;
+// Raised from 800 when this moved onto the provider switch: reasoning tokens
+// share this budget with the visible reply. It's a ceiling, not spend.
+const STRUCTURE_MAX_TOKENS = 4096;
 
 const SYSTEM_PROMPT = `You convert an operator's guidance into a clean, reusable "training block" for an AI assistant that drafts guest messages (and triages operational tasks) for a property / hospitality operations team.
 
@@ -82,14 +84,11 @@ async function runStructuring(userContent: string): Promise<
   | { title: string; instructions: string; tier: TrainingTier; category: TrainingCategory; label: string }
   | null
 > {
-  const client = getAnthropic();
-  const messages: MessageParam[] = [{ role: 'user', content: userContent }];
-  const response = await client.messages.create({
-    model: MODEL,
+  const response = await createModelMessage({
     max_tokens: STRUCTURE_MAX_TOKENS,
-    thinking: { type: 'disabled' },
-    system: SYSTEM_PROMPT,
-    messages,
+    system: [{ type: 'text', text: SYSTEM_PROMPT }],
+    tools: [],
+    messages: [{ role: 'user', content: userContent }],
   });
   const raw = response.content
     .filter((b): b is TextBlock => b.type === 'text')

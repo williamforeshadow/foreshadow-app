@@ -84,7 +84,10 @@ const MAX_DRAFT_ITERATIONS = 6;
 // the previous model (omitting it would run adaptive thinking, which shares the
 // DRAFT_MAX_TOKENS budget with the reply itself and would truncate it).
 
-const DRAFT_MAX_TOKENS = 700; // headroom for a tool-call turn + the final reply
+// Raised from 700 when reasoning was enabled on the provider paths: reasoning
+// tokens share this budget with the visible reply, so the old cap would eat
+// the draft. It's a ceiling, not spend.
+const DRAFT_MAX_TOKENS = 4096;
 const MAX_THREAD_MESSAGES = 30; // recent context is enough; threads are short
 
 const SYSTEM_PROMPT = `You draft the next message a short-term-rental host's team should send to a guest in an ongoing conversation. Your entire output is that message, ready to send.

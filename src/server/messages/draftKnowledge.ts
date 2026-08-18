@@ -1,5 +1,5 @@
-import type { TextBlock } from '@anthropic-ai/sdk/resources/messages';
-import { getAnthropic, MODEL } from '@/src/agent/anthropic';
+import type { BetaTextBlock as TextBlock } from '@anthropic-ai/sdk/resources/beta/messages';
+import { createModelMessage } from '@/src/agent/modelProvider';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { loadPropertyKnowledge } from '@/src/server/properties/propertyKnowledge';
 import {
@@ -29,7 +29,9 @@ import type { GuestMessageRecord } from '@/lib/messages';
 // Single structured call, thinking off. Domain-agnostic; what qualifies is judged from
 // the conversation, not assumptions.
 
-const TRIAGE_MAX_TOKENS = 900;
+// Raised from 900 when this moved onto the provider switch: reasoning tokens
+// share this budget with the visible reply. It's a ceiling, not spend.
+const TRIAGE_MAX_TOKENS = 4096;
 const MAX_THREAD_MESSAGES = 40;
 
 type RoomScope = 'interior' | 'exterior';
@@ -578,12 +580,10 @@ export async function generateProposedKnowledgeFromContext(
     'Decide whether this conversation established any durable, reusable fact about the property worth saving (usually none). Respond with the JSON object only.',
   );
 
-  const client = getAnthropic();
-  const response = await client.messages.create({
-    model: MODEL,
+  const response = await createModelMessage({
     max_tokens: TRIAGE_MAX_TOKENS,
-    thinking: { type: 'disabled' },
-    system: SYSTEM_PROMPT,
+    system: [{ type: 'text', text: SYSTEM_PROMPT }],
+    tools: [],
     messages: [{ role: 'user', content: userParts.join('\n') }],
   });
 

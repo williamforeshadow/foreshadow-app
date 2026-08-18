@@ -1,13 +1,13 @@
 import type {
-  ImageBlockParam,
-  MessageParam,
-  TextBlock,
-  TextBlockParam,
-  ToolUseBlock,
-  ToolResultBlockParam,
-  Tool,
-} from '@anthropic-ai/sdk/resources/messages';
-import { getAnthropic, MODEL } from '@/src/agent/anthropic';
+  BetaImageBlockParam as ImageBlockParam,
+  BetaMessageParam as MessageParam,
+  BetaTextBlock as TextBlock,
+  BetaTextBlockParam as TextBlockParam,
+  BetaToolUseBlock as ToolUseBlock,
+  BetaToolResultBlockParam as ToolResultBlockParam,
+  BetaTool as Tool,
+} from '@anthropic-ai/sdk/resources/beta/messages';
+import { createModelMessage } from '@/src/agent/modelProvider';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { loadConciergeImages } from './attachmentImages';
 import { dispatchTool, type ToolCallTrace } from '@/src/agent/dispatchTool';
@@ -43,7 +43,10 @@ import type { GuestMessageRecord } from '@/lib/messages';
 // The sensitivity ladder and the "return an empty list when unsure" rule carry it
 // instead. Thinking is off so the JSON turn keeps the whole token budget.
 
-const TRIAGE_MAX_TOKENS = 900; // per-turn headroom so the final JSON isn't truncated
+// Raised from 900 when this moved onto the provider switch: reasoning tokens
+// share this budget with the visible reply, so the old per-turn headroom would
+// truncate the final JSON. It's a ceiling, not spend.
+const TRIAGE_MAX_TOKENS = 4096;
 const MAX_THREAD_MESSAGES = 30;
 const MAX_TRIAGE_ITERATIONS = 4; // one grounding tool detour + the JSON turn, with slack
 
@@ -504,7 +507,6 @@ export async function generateProposedTaskDraftFromContext(
     },
   };
 
-  const client = getAnthropic();
   // Images lead, each behind its own label, then the text block — images before
   // text outperform images placed after or interleaved, and the labels are what
   // let the transcript's "[sent Image 2]" refer to something. They sit after the
@@ -526,10 +528,8 @@ export async function generateProposedTaskDraftFromContext(
   let raw = '';
   let gotFinal = false;
   for (let i = 0; i < MAX_TRIAGE_ITERATIONS; i++) {
-    const response = await client.messages.create({
-      model: MODEL,
+    const response = await createModelMessage({
       max_tokens: TRIAGE_MAX_TOKENS,
-      thinking: { type: 'disabled' },
       system: systemBlocks,
       tools,
       messages: conversation,

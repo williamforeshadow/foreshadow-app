@@ -1,8 +1,23 @@
-import type {
-  ToolUseBlock,
-  ToolResultBlockParam,
-} from '@anthropic-ai/sdk/resources/messages';
 import type { ToolContext, ToolResult, ToolDefinition } from './tools/types';
+
+// Structural stand-ins for the SDK's ToolUseBlock / ToolResultBlockParam.
+// This module serves two loops on different API namespaces — runAgent on
+// beta.messages, the Concierge draft generators on plain messages — and the
+// SDK's beta and non-beta block types are not mutually assignable. We only
+// read id/name/input and only ever emit string-content results, so a minimal
+// shape both namespaces accept keeps this file namespace-agnostic.
+export interface ToolUseBlock {
+  id: string;
+  name: string;
+  input: unknown;
+}
+
+export interface ToolResultBlockParam {
+  type: 'tool_result';
+  tool_use_id: string;
+  is_error: boolean;
+  content: string;
+}
 
 // Registry-free tool execution: validate the model's input against a RESOLVED
 // tool's zod schema, run its handler with the per-run ToolContext, and wrap the

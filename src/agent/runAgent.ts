@@ -83,14 +83,18 @@ export const WRITE_TOOL_NAMES: ReadonlySet<string> = new Set([
 // this invoice" and "what does this spreadsheet say" produce genuinely long
 // answers, and a truncated one reads to the user as the vision feature being
 // broken rather than as a token cap.
-const MAX_TOKENS = 4096;
+//
+// Raised again to 16000 when adaptive thinking was enabled (2026-08-17):
+// thinking tokens and the visible reply share this budget, so the old 4096
+// would have starved answers on turns where the model thinks hard. 16000 also
+// stays under the SDK's non-streaming HTTP-timeout guidance.
+const MAX_TOKENS = 16000;
 // NOTE: this model rejects non-default sampling parameters, so the temperature 0
 // we relied on for tool-grounded answers is gone and cannot be restored. Grounding
-// now rests entirely on the prompt's identifier/linking rules and on the write-claim
-// backstop. Thinking is pinned off to match the previous model's behavior (this
-// model runs adaptive thinking when the parameter is omitted, which would also eat
-// into MAX_TOKENS); turn it on deliberately, with a raised budget, if tool
-// selection needs the help.
+// now rests on the prompt's identifier/linking rules, the write-claim backstop,
+// and — since 2026-08-17 — adaptive thinking at medium effort (set in
+// modelProvider.ts), which gives the model actual deliberation room for tool
+// selection across the 45-tool catalog.
 // Hard ceiling on iterations. A well-behaved tool catalog should never need
 // more than 3-4 round-trips for a single user question; this is a safety net.
 const MAX_ITERATIONS = 10;

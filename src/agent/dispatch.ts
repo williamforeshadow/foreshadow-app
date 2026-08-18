@@ -1,10 +1,11 @@
-import type {
-  ToolUseBlock,
-  ToolResultBlockParam,
-} from '@anthropic-ai/sdk/resources/messages';
 import { TOOLS_BY_NAME } from './tools';
 import type { ToolContext, ToolResult } from './tools/types';
-import { dispatchTool, type ToolCallTrace } from './dispatchTool';
+import {
+  dispatchTool,
+  type ToolCallTrace,
+  type ToolUseBlock,
+  type ToolResultBlockParam,
+} from './dispatchTool';
 
 // Registry-based dispatcher used by the ops agent (runAgent): resolve a tool by
 // name from the full registry, then hand off to the registry-free dispatchTool.

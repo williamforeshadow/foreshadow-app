@@ -1,6 +1,6 @@
-import type { MessageParam, TextBlock } from '@anthropic-ai/sdk/resources/messages';
+import type { BetaTextBlock as TextBlock } from '@anthropic-ai/sdk/resources/beta/messages';
 import { getSupabaseServer } from '@/lib/supabaseServer';
-import { getAnthropic, MODEL } from '@/src/agent/anthropic';
+import { createModelMessage } from '@/src/agent/modelProvider';
 import { deriveReservationStatus, type BookingState } from '@/lib/conversations';
 import {
   getConversationContext,
@@ -27,7 +27,10 @@ import type { GuestMessageRecord } from '@/lib/messages';
 export type Sentiment = 'positive' | 'neutral' | 'negative';
 const SENTIMENTS: readonly Sentiment[] = ['positive', 'neutral', 'negative'];
 
-const SENTIMENT_MAX_TOKENS = 300; // a verdict + 1-2 sentences, with headroom
+// Raised from 300 when this moved onto the provider switch: reasoning tokens
+// share this budget with the visible reply, so the old tight cap would
+// truncate the verdict. It's a ceiling, not spend.
+const SENTIMENT_MAX_TOKENS = 4096;
 const MAX_THREAD_MESSAGES = 30;
 
 const SYSTEM_PROMPT = `You read an ongoing conversation between a short-term-rental host's team and a guest, and you assess the GUEST's overall sentiment toward their stay/booking so far.
@@ -148,14 +151,11 @@ export async function generateConversationSentimentFromContext(
     'Assess the guest\'s overall sentiment and respond with the JSON object only.',
   ].join('\n');
 
-  const client = getAnthropic();
-  const messages: MessageParam[] = [{ role: 'user', content: userText }];
-  const response = await client.messages.create({
-    model: MODEL,
+  const response = await createModelMessage({
     max_tokens: SENTIMENT_MAX_TOKENS,
-    thinking: { type: 'disabled' },
-    system: SYSTEM_PROMPT,
-    messages,
+    system: [{ type: 'text', text: SYSTEM_PROMPT }],
+    tools: [],
+    messages: [{ role: 'user', content: userText }],
   });
 
   const raw = response.content
