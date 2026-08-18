@@ -1,13 +1,18 @@
 'use client';
 
 import * as React from 'react';
-import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
+import { Drawer } from 'vaul';
 import { useEditableKeyboardOverlay } from '@/lib/useEditableKeyboardOverlay';
 import { setChatKeyboardOverlay } from '@/lib/nativeKeyboard';
 
 // Bottom sheet styled for the task detail panel: rounded top, drag handle,
 // panel-scoped surfaces. Content is arbitrary; pickers compose TaskSheetOption
 // rows inside it.
+//
+// Built on vaul so the drawer is a physical object: drag it from anywhere
+// (vaul arbitrates against the inner list's scroll), flick or drag down to
+// dismiss, rubber-band on overdrag. Gestures — plus the scrim tap and Escape
+// — are the ways out; there is deliberately no X button.
 export function TaskSheet({
   open,
   onOpenChange,
@@ -28,7 +33,8 @@ export function TaskSheet({
   // Any sheet content with an editable field gets the overlay-keyboard
   // treatment; bottom-anchored surfaces must also rise by the inset or the
   // field ends up behind the keyboard. Inline `bottom` (not transform) so
-  // Radix's slide animation is untouched.
+  // vaul's drag/settle translate is untouched. vaul's own input repositioning
+  // is disabled below — this app's Capacitor keyboard system owns that job.
   const kb = useEditableKeyboardOverlay();
 
   // Arm overlay for the sheet's whole lifetime, not just from first touch:
@@ -41,42 +47,46 @@ export function TaskSheet({
     return () => void setChatKeyboardOverlay(false);
   }, [open]);
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="bottom"
-        overlayClassName={overlayClassName}
-        className={`task-detail border-t p-0 rounded-t-[18px] gap-0 ${className ?? ''}`}
-        style={{
-          background: 'var(--task-surface-1)',
-          borderColor: 'var(--task-line)',
-          bottom: kb.typing && kb.keyboardInset > 0 ? kb.keyboardInset : undefined,
-        }}
-        // Radix focuses the first focusable element on open — in a sheet with
-        // a search field that means the keyboard erupts (and races the
-        // overlay arming) before the user asked for it. A sheet opens showing
-        // its list; the keyboard waits for a tap on the field.
-        onOpenAutoFocus={(e) => e.preventDefault()}
-        {...kb.handlers}
-      >
-        <div
-          className="mx-auto mt-2.5 h-1 w-9 rounded-full"
-          style={{ background: 'var(--task-line)' }}
+    <Drawer.Root open={open} onOpenChange={onOpenChange} repositionInputs={false}>
+      <Drawer.Portal>
+        <Drawer.Overlay
+          className={`fixed inset-0 z-50 bg-black/50 ${overlayClassName ?? ''}`}
         />
-        <SheetTitle asChild>
-          <div
-            className="px-[18px] pt-3 pb-3 font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
-            style={{ color: 'var(--task-ink-3)' }}
-          >
-            {title}
-          </div>
-        </SheetTitle>
-        <div
-          className="px-[18px] pb-[calc(1.75rem+env(safe-area-inset-bottom))] max-h-[65vh] overflow-y-auto"
+        <Drawer.Content
+          aria-describedby={undefined}
+          className={`task-detail fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[18px] border-t outline-none ${className ?? ''}`}
+          style={{
+            background: 'var(--task-surface-1)',
+            borderColor: 'var(--task-line)',
+            bottom: kb.typing && kb.keyboardInset > 0 ? kb.keyboardInset : 0,
+          }}
+          // Radix focuses the first focusable element on open — in a sheet with
+          // a search field that means the keyboard erupts (and races the
+          // overlay arming) before the user asked for it. A sheet opens showing
+          // its list; the keyboard waits for a tap on the field.
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          {...kb.handlers}
         >
-          {children}
-        </div>
-      </SheetContent>
-    </Sheet>
+          <div
+            className="mx-auto mt-2.5 h-1 w-9 shrink-0 rounded-full"
+            style={{ background: 'var(--task-line)' }}
+          />
+          <Drawer.Title asChild>
+            <div
+              className="px-[18px] pt-3 pb-3 font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
+              style={{ color: 'var(--task-ink-3)' }}
+            >
+              {title}
+            </div>
+          </Drawer.Title>
+          <div
+            className="px-[18px] pb-[calc(1.75rem+env(safe-area-inset-bottom))] max-h-[65vh] overflow-y-auto"
+          >
+            {children}
+          </div>
+        </Drawer.Content>
+      </Drawer.Portal>
+    </Drawer.Root>
   );
 }
 
