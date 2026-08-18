@@ -260,7 +260,7 @@ export function ProposedReply({
           border — it reads as "a message, but a draft" rather than a colored alert. */}
       <div className="msg-in glass-card glass-sheen relative w-full max-w-[88%] overflow-hidden rounded-2xl border border-dashed bg-[var(--msg-sent-bg)] border-[var(--msg-sent-border)]">
         <div className="flex items-center gap-1.5 px-3.5 pt-2.5 text-[11px] font-medium text-muted-foreground">
-          <span className="text-white">Proposed Reply</span>
+          <span className="text-foreground">Proposed Reply</span>
           {source === 'assistant' ? (
             <span className="rounded-full bg-foreground/10 px-1.5 text-[10px] font-medium">
               via assistant

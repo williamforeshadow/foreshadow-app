@@ -6,8 +6,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { qk } from '@/lib/queries/keys';
 import { fetchJson } from '@/lib/queries/fetchJson';
 import { CheckCircle2, RotateCcw, Mail, Info } from 'lucide-react';
+import Link from 'next/link';
 import { ConciergeToggleIcon } from '@/components/messages/ConciergeToggleIcon';
-import MobileRouteShell from '@/components/mobile/MobileRouteShell';
+import { useBackNavigation } from '@/lib/navigationHistoryTracker';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { useMessages } from '@/components/messages/MessagesProvider';
 import { toast } from '@/components/ui/toast';
@@ -72,6 +73,7 @@ function fmtStayRange(ci: string | null, co: string | null): string | null {
 export default function ConversationPage() {
   const params = useParams();
   const router = useRouter();
+  const goBack = useBackNavigation();
   const isMobile = useIsMobile();
   const { reload } = useMessages();
 
@@ -318,33 +320,57 @@ export default function ConversationPage() {
       </div>
     ) : null;
 
-    // Secondary header line: property (truncates) · stay dates (pinned). Only
+    // Fine-print line: property (truncates) · stay dates (pinned). Only
     // rendered once we have a conversation with a property and/or dates to show.
     const stayRange = conversation
       ? fmtStayRange(conversation.check_in, conversation.check_out)
       : null;
-    const headerSubtitle =
-      conversation && (conversation.property_name || stayRange) ? (
-        <>
-          {conversation.property_name ? (
-            <span className="truncate">{conversation.property_name}</span>
-          ) : null}
-          {conversation.property_name && stayRange ? (
-            <span aria-hidden>·</span>
-          ) : null}
-          {stayRange ? (
-            <span className="shrink-0 tabular-nums">{stayRange}</span>
-          ) : null}
-        </>
-      ) : null;
 
     return (
-      <MobileRouteShell
-        backHref="/messages"
-        title={conversation?.guest_name ?? 'Conversation'}
-        subtitle={headerSubtitle}
-        rightSlot={topBarActions}
-      >
+      <div className="h-dvh bg-white dark:bg-card overflow-hidden flex flex-col safe-area-top">
+        {/* Standard page header — back chevron + guest name on one line,
+            property · stay dates as the uppercase fine print beneath, all in
+            the shared gradient block. */}
+        <div className="flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,var(--header-scrim),transparent)] border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
+          <div className="px-2 pt-1 flex items-center gap-1 min-h-11">
+            <Link
+              href="/messages"
+              onClick={(e) => {
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                if (e.button !== 0) return;
+                e.preventDefault();
+                goBack('/messages');
+              }}
+              className="w-10 h-10 flex items-center justify-center rounded-lg text-neutral-700 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors shrink-0"
+              aria-label="Back"
+            >
+              <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </Link>
+            <h1 className="min-w-0 flex-1 text-[20px] font-semibold tracking-tight leading-tight text-neutral-900 dark:text-[#f0efed] truncate">
+              {conversation?.guest_name ?? 'Conversation'}
+            </h1>
+            <div className="shrink-0">{topBarActions}</div>
+          </div>
+          {conversation && (conversation.property_name || stayRange) ? (
+            <div className="px-[22px] pt-0.5 pb-2">
+              <div className="flex items-center gap-3 min-w-0 text-[11px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
+                {conversation.property_name ? (
+                  <span className="truncate">{conversation.property_name}</span>
+                ) : null}
+                {conversation.property_name && stayRange ? (
+                  <span className="w-[3px] h-[3px] rounded-full bg-neutral-300 dark:bg-[#3e3d3a] shrink-0" />
+                ) : null}
+                {stayRange ? (
+                  <span className="shrink-0 tabular-nums">{stayRange}</span>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <main className="flex-1 min-h-0 overflow-hidden">
         <div className="flex h-full flex-col">
           <ConversationThread
             messages={messages}
@@ -378,6 +404,7 @@ export default function ConversationPage() {
             onProposedKnowledgeChange={load}
           />
         </div>
+        </main>
 
         <MobileConversationDetailSheet
           open={detailOpen}
@@ -412,7 +439,7 @@ export default function ConversationPage() {
             onOpenInPage={() => router.push(taskPath(selectedTask.task_id))}
           />
         ) : null}
-      </MobileRouteShell>
+      </div>
     );
   }
 

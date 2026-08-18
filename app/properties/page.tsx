@@ -8,6 +8,7 @@ import { qk } from '@/lib/queries/keys';
 import { fetchJson } from '@/lib/queries/fetchJson';
 import { WindowHeader } from '@/components/ui/window-header';
 import { LoadingState } from '@/components/ui/loading-state';
+import { useBackNavigation } from '@/lib/navigationHistoryTracker';
 
 interface PropertyRow {
   id: string;
@@ -32,6 +33,7 @@ interface PropertyGroup {
 
 export default function PropertiesPage() {
   const router = useRouter();
+  const goBack = useBackNavigation();
   const queryClient = useQueryClient();
   const propertiesQuery = useQuery({
     queryKey: qk.propertiesAll,
@@ -60,7 +62,7 @@ export default function PropertiesPage() {
     await queryClient.invalidateQueries({ queryKey: ['properties'] });
   }, [queryClient]);
 
-  const { groups, activeCount, inactiveCount, linkedCount, unlinkedCount } = useMemo(() => {
+  const { groups } = useMemo(() => {
     const linkedActive: PropertyRow[] = [];
     const unlinkedActive: PropertyRow[] = [];
     const inactive: PropertyRow[] = [];
@@ -178,65 +180,72 @@ export default function PropertiesPage() {
     }
   };
 
+  const headerActions = (
+    <>
+      <button
+        onClick={handleSync}
+        disabled={syncing}
+        title="Pull latest listings and reservations from your PMS"
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-neutral-700 dark:text-[#a09e9a] border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] rounded-md hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors disabled:opacity-50"
+      >
+        <svg className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M20 9A8 8 0 006.5 6.5M4 15a8 8 0 0013.5 2.5" />
+        </svg>
+        {syncing ? 'Syncing…' : 'Sync with PMS'}
+      </button>
+      <button
+        onClick={() => setShowAddModal(true)}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium bg-[var(--accent-3)] text-white rounded-md hover:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] transition-colors"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+        </svg>
+        Add Property
+      </button>
+    </>
+  );
+
   return (
     <div className="flex h-full overflow-hidden">
       <div className="w-full flex flex-col min-w-0">
-        {/* Title is rendered by MobileRouteShell on mobile, so the node passed
-            to WindowHeader hides itself there — the empty h1 collapses and the
-            header shrinks to just the control row. */}
-        <WindowHeader title={<span className="hidden sm:inline">Properties</span>}>
-              <div className="flex items-center gap-3 text-[12px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium flex-wrap">
-                <span>{activeCount} active</span>
-                {linkedCount > 0 && (
-                  <>
-                    <span className="w-[3px] h-[3px] rounded-full bg-neutral-300 dark:bg-[#3e3d3a]" />
-                    <span>{linkedCount} linked</span>
-                  </>
-                )}
-                {unlinkedCount > 0 && (
-                  <>
-                    <span className="w-[3px] h-[3px] rounded-full bg-neutral-300 dark:bg-[#3e3d3a]" />
-                    <span>{unlinkedCount} unlinked</span>
-                  </>
-                )}
-                {inactiveCount > 0 && (
-                  <>
-                    <span className="w-[3px] h-[3px] rounded-full bg-neutral-300 dark:bg-[#3e3d3a]" />
-                    <span>{inactiveCount} inactive</span>
-                  </>
-                )}
-              </div>
-            <div className="ml-auto shrink-0 flex items-center gap-2">
+        {/* Mobile: standard page header — back arrow + title, fine print,
+            toolbar — in the shared gradient block. (The route layout renders
+            no top bar of its own.) */}
+        <div className="sm:hidden flex-shrink-0 bg-white dark:bg-card bg-[linear-gradient(to_bottom,var(--header-scrim),transparent)] border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
+          <div className="px-[22px] pt-2 pb-1">
+            <div className="flex items-center gap-2 min-w-0">
               <button
-                onClick={handleSync}
-                disabled={syncing}
-                title="Pull latest listings and reservations from your PMS"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-neutral-700 dark:text-[#a09e9a] border border-neutral-200 dark:border-[rgba(255,255,255,0.08)] rounded-md hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors disabled:opacity-50"
+                onClick={() => goBack('/menu')}
+                className="-ml-2 w-10 h-10 flex items-center justify-center rounded-lg text-neutral-700 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors"
+                aria-label="Back"
               >
-                {syncing ? (
-                  <svg className="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M20 9A8 8 0 006.5 6.5M4 15a8 8 0 0013.5 2.5" />
-                  </svg>
-                ) : (
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M20 9A8 8 0 006.5 6.5M4 15a8 8 0 0013.5 2.5" />
-                  </svg>
-                )}
-                <span className="hidden sm:inline">{syncing ? 'Syncing…' : 'Sync with PMS'}</span>
-                <span className="sm:hidden">{syncing ? 'Syncing' : 'Sync'}</span>
-              </button>
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium bg-[var(--accent-3)] text-white rounded-md hover:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] transition-colors"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
-                <span className="hidden sm:inline">Add Property</span>
-                <span className="sm:hidden">Add</span>
               </button>
+              <h1 className="text-[20px] font-semibold tracking-tight leading-tight text-neutral-900 dark:text-[#f0efed] truncate">
+                Properties
+              </h1>
             </div>
-        </WindowHeader>
+          </div>
+          <div className="px-[22px] pb-2">
+            <div className="flex items-center gap-3 text-[11px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
+              <span>Every property in the workspace</span>
+            </div>
+          </div>
+          <div className="px-[22px] pb-3 flex items-center gap-2">
+            {headerActions}
+          </div>
+        </div>
+
+        {/* Desktop header */}
+        <div className="hidden sm:block">
+          <WindowHeader title="Properties">
+            <div className="ml-auto shrink-0 flex items-center gap-2">
+              {headerActions}
+            </div>
+          </WindowHeader>
+        </div>
 
         {/* Content */}
         <div className="flex-1 overflow-auto pb-mobile-bubble">

@@ -68,7 +68,7 @@ export function TrainingReferences({ sources }: { sources: ConciergeSourcesRecor
         className="inline-flex items-center gap-1.5 rounded-full border border-[var(--msg-sent-border)] px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-foreground/5"
       >
         <GraduationCap className="h-3.5 w-3.5" aria-hidden />
-        Referenced Training Blocks
+        References
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>

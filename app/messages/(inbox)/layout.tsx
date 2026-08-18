@@ -69,12 +69,7 @@ function MessagesChrome({ children }: { children: React.ReactNode }) {
               Messages
             </h1>
           </div>
-          <div className="px-[22px] pb-2">
-            <div className="flex items-center gap-3 text-[11px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
-              <span>Guest conversations</span>
-            </div>
-          </div>
-          <div className="px-[22px] pb-1.5 flex items-center">
+          <div className="px-[22px] pt-1 pb-1.5 flex items-center">
             <ListControls />
           </div>
           {/* Collapsed to nothing until the search affordance is toggled. */}

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { LoadingState } from '@/components/ui/loading-state';
 import { useEditableKeyboardOverlay } from '@/lib/useEditableKeyboardOverlay';
+import { useBackNavigation } from '@/lib/navigationHistoryTracker';
 import { PropertyProvider, usePropertyContext } from './PropertyContext';
 
 // ---- Tab definitions -------------------------------------------------------
@@ -125,6 +126,7 @@ function ShellBody({
 }) {
   const { property, loading, error } = usePropertyContext();
   const router = useRouter();
+  const goBack = useBackNavigation();
   const pathname = usePathname() || '';
 
   // Every knowledge tab renders its own scroll container, so the keyboard
@@ -189,7 +191,37 @@ function ShellBody({
     <div className="flex flex-col h-full overflow-hidden" {...kb.handlers}>
       {/* Header + tab strip */}
       <div className="flex-shrink-0 border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
-        <div className="px-5 sm:px-8 pt-4 sm:pt-6 pb-0">
+        {/* Mobile top bar — back chevron with the property name BESIDE it
+            (not below), matching every other drill-in page. */}
+        <div className="sm:hidden flex items-center gap-1 min-h-11 px-2 pt-1">
+          <Link
+            href="/properties"
+            onClick={(e) => {
+              if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+              if (e.button !== 0) return;
+              e.preventDefault();
+              goBack('/properties');
+            }}
+            className="w-10 h-10 flex items-center justify-center rounded-lg text-neutral-700 dark:text-[#a09e9a] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] transition-colors shrink-0"
+            aria-label="Back"
+          >
+            <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </Link>
+          <div className="min-w-0 flex-1 flex items-center gap-2">
+            <h1 className="text-[17px] font-semibold tracking-tight leading-tight text-neutral-900 dark:text-[#f0efed] truncate">
+              {property.name}
+            </h1>
+            {!property.is_active && (
+              <span className="shrink-0 inline-flex items-center px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] rounded-md bg-neutral-200 dark:bg-[#2a2825] text-neutral-600 dark:text-[#a09e9a]">
+                Inactive
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="px-5 sm:px-8 pt-1 sm:pt-6 pb-0">
           <Link
             href="/properties"
             className="hidden sm:inline-flex items-center gap-1.5 text-[12px] text-neutral-500 dark:text-[#66645f] hover:text-neutral-800 dark:hover:text-[#f0efed] uppercase tracking-[0.04em] font-medium mb-4 transition-colors"
@@ -200,7 +232,8 @@ function ShellBody({
             All Properties
           </Link>
 
-          <div className="mb-4">
+          {/* Desktop title block — on mobile the name lives in the top bar. */}
+          <div className="hidden sm:block mb-4">
             <div className="flex items-center gap-2.5 flex-wrap">
               <h1 className="text-[22px] sm:text-[26px] font-semibold tracking-tight text-neutral-900 dark:text-[#f0efed] leading-tight">
                 {property.name}
