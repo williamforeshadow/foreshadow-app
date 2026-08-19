@@ -115,8 +115,10 @@ export function CreateTaskPanel({
 
   const [templateOpen, setTemplateOpen] = useState(false);
   const [propertyOpen, setPropertyOpen] = useState(false);
+  const [propertyQuery, setPropertyQuery] = useState('');
   const [deptOpen, setDeptOpen] = useState(false);
   const [assigneesOpen, setAssigneesOpen] = useState(false);
+  const [assigneeQuery, setAssigneeQuery] = useState('');
   const [schedOpen, setSchedOpen] = useState(false);
   const [binOpen, setBinOpen] = useState(false);
   const [descOpen, setDescOpen] = useState(false);
@@ -286,13 +288,30 @@ export function CreateTaskPanel({
         {/* Assignees (multi-select — stays open) */}
         <AdaptivePicker
           open={assigneesOpen}
-          onOpenChange={setAssigneesOpen}
+          onOpenChange={(v) => {
+            setAssigneesOpen(v);
+            if (!v) setAssigneeQuery('');
+          }}
           title="Assignees"
           trigger={
             <FieldRow icon={ICONS.people} value={assignedNames || null} placeholder="Assign people" />
           }
         >
-          {users.map((u) => (
+          <input
+            type="text"
+            value={assigneeQuery}
+            onChange={(e) => setAssigneeQuery(e.target.value)}
+            placeholder="Search people…"
+            className="mb-2 w-full rounded-lg border bg-transparent px-3 py-2 text-[14px] focus:outline-none"
+            style={{ borderColor: 'var(--task-line)', color: 'var(--task-ink-1)' }}
+          />
+          {users
+            .filter(
+              (u) =>
+                !assigneeQuery.trim() ||
+                u.name.toLowerCase().includes(assigneeQuery.toLowerCase())
+            )
+            .map((u) => (
             <TaskOptionRow
               key={u.id}
               selected={c.draft.assigned_staff.includes(u.id)}
@@ -314,7 +333,10 @@ export function CreateTaskPanel({
         {/* Property — locked once seeded by the opening surface */}
         <AdaptivePicker
           open={propertyOpen}
-          onOpenChange={setPropertyOpen}
+          onOpenChange={(v) => {
+            setPropertyOpen(v);
+            if (!v) setPropertyQuery('');
+          }}
           title="Property"
           disabled={propertyLocked}
           trigger={
@@ -326,17 +348,33 @@ export function CreateTaskPanel({
             />
           }
         >
-          <TaskOptionRow
-            selected={!c.draft.property_id}
-            onSelect={() => {
-              c.updateField('property_id', null);
-              c.updateField('property_name', null);
-              setPropertyOpen(false);
-            }}
-          >
-            No property
-          </TaskOptionRow>
-          {properties.map((p) => (
+          <input
+            type="text"
+            value={propertyQuery}
+            onChange={(e) => setPropertyQuery(e.target.value)}
+            placeholder="Search properties…"
+            className="mb-2 w-full rounded-lg border bg-transparent px-3 py-2 text-[14px] focus:outline-none"
+            style={{ borderColor: 'var(--task-line)', color: 'var(--task-ink-1)' }}
+          />
+          {!propertyQuery.trim() && (
+            <TaskOptionRow
+              selected={!c.draft.property_id}
+              onSelect={() => {
+                c.updateField('property_id', null);
+                c.updateField('property_name', null);
+                setPropertyOpen(false);
+              }}
+            >
+              No property
+            </TaskOptionRow>
+          )}
+          {properties
+            .filter(
+              (p) =>
+                !propertyQuery.trim() ||
+                p.name.toLowerCase().includes(propertyQuery.toLowerCase())
+            )
+            .map((p) => (
             <TaskOptionRow
               key={p.id ?? p.name}
               selected={p.id === c.draft.property_id}

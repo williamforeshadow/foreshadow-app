@@ -4,7 +4,6 @@ import {
   memo,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -21,11 +20,6 @@ import {
   taskRowMinWidth,
   type TaskRowItem,
 } from '@/components/tasks/TaskRow';
-import {
-  groupTasksByDate,
-  TaskSectionHeader,
-  useCollapsedSections,
-} from '@/components/tasks/taskDateSections';
 import {
   FilterPicker,
   SortPicker,
@@ -185,20 +179,11 @@ function TasksWindowContent({ isActive = true }: TasksWindowProps) {
   // Creation itself lives in useTaskCreate (via CreateTaskPanel) — this
   // surface only reacts to the result.
 
-  // ---- Per-day grouping (shared across all task surfaces) ----------------
-  // `tasks` arrives pre-sorted by the hook, so grouping just partitions it.
+  // No grouping here — this page is the raw all-tasks ledger, curated by the
+  // filters and the sort alone (My Assignments keeps its date sections).
+  // `tasks` arrives from the hook already filtered + sorted, so it renders
+  // flat, completed rows included.
 
-  const groups = useMemo(
-    () =>
-      groupTasksByDate(tasks, {
-        includeCompletedSection: true,
-        dayOrder: sort.key === 'scheduled' ? sort.dir : 'asc',
-      }),
-    [tasks, sort.key, sort.dir]
-  );
-
-  const { collapsed: collapsedSections, toggle: toggleSection } =
-    useCollapsedSections();
   // Standard filter/sort pickers — the funnel and sort pill open the same
   // drill-in content the mobile drawer shows, as an anchored popover.
   const [filterOpen, setFilterOpen] = useState(false);
@@ -361,51 +346,35 @@ function TasksWindowContent({ isActive = true }: TasksWindowProps) {
               <div className="pt-5">
                 <TaskListHeader showOccupancy lockColumnWidths />
               </div>
-              {groups.map((group) => {
-                const isCollapsed = collapsedSections.has(group.id);
-                return (
-                  <div key={group.id} className="pt-5">
-                    <TaskSectionHeader
-                      label={group.label}
-                      collapsed={isCollapsed}
-                      onToggle={() => toggleSection(group.id)}
+              <div className="flex flex-col">
+                {tasks.map((t, idx) => {
+                  const dept = allDepts.find((d) => d.id === t.department_id);
+                  const DeptIcon = getDepartmentIcon(dept?.icon);
+                  const isSelected = selectedTask?.task_id === t.task_id;
+                  const isLast = idx === tasks.length - 1;
+                  return (
+                    <TaskRow
+                      key={`task-${t.task_id}`}
+                      item={toRowItem(t)}
+                      selected={isSelected}
+                      isLast={isLast}
+                      onClick={() => {
+                        if (isSelected) {
+                          setSelectedTask(null);
+                        } else {
+                          closeGlobals();
+                          setCreatingOpen(false);
+                          setSelectedTask(t);
+                        }
+                      }}
+                      showBinPill
+                      showOccupancy
+                      lockColumnWidths
+                      departmentIcon={DeptIcon}
                     />
-
-                    {!isCollapsed && (
-                      <div className="flex flex-col">
-                        {group.items.map((t, idx) => {
-                          const dept = allDepts.find((d) => d.id === t.department_id);
-                          const DeptIcon = getDepartmentIcon(dept?.icon);
-                          const isSelected = selectedTask?.task_id === t.task_id;
-                          const isLast = idx === group.items.length - 1;
-                          return (
-                            <TaskRow
-                              key={`task-${t.task_id}`}
-                              item={toRowItem(t)}
-                              selected={isSelected}
-                              isLast={isLast}
-                              whenMode={group.kind === 'day' ? 'time' : 'date'}
-                              onClick={() => {
-                                if (isSelected) {
-                                  setSelectedTask(null);
-                                } else {
-                                  closeGlobals();
-                                  setCreatingOpen(false);
-                                  setSelectedTask(t);
-                                }
-                              }}
-                              showBinPill
-                              showOccupancy
-                              lockColumnWidths
-                              departmentIcon={DeptIcon}
-                            />
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

@@ -19,11 +19,7 @@ import type {
 } from '@/lib/types';
 import { MobileTaskRow } from '@/components/tasks/MobileTaskRow';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
-import {
-  groupTasksByDate,
-  TaskSectionHeader,
-  useCollapsedSections,
-} from '@/components/tasks/taskDateSections';
+import { todayISO } from '@/components/tasks/taskDateSections';
 import { TaskDetailPanel } from '@/components/tasks/detail/TaskDetailPanel';
 import { projectToTaskInput } from '@/components/tasks/detail/taskInput';
 import { CreateTaskPanel } from '@/components/tasks/create/CreateTaskPanel';
@@ -178,19 +174,10 @@ function MobileTasksViewContent() {
 
   // ---- Grouping ---------------------------------------------------------
 
-  // `tasks` arrives pre-sorted by the hook, so grouping just partitions it
-  // into per-day sections that preserve the user's chosen order.
-  const groups = useMemo(
-    () =>
-      groupTasksByDate(tasks, {
-        includeCompletedSection: true,
-        dayOrder: sort.key === 'scheduled' ? sort.dir : 'asc',
-      }),
-    [tasks, sort.key, sort.dir]
-  );
-
-  const { collapsed: collapsedSections, toggle: toggleSection } =
-    useCollapsedSections();
+  // No grouping — this page is the raw all-tasks ledger, curated by the
+  // filters and sort alone (My Assignments keeps its date sections). `today`
+  // marks past-due open tasks with the urgent-red inline date.
+  const today = todayISO();
 
   return (
     <div className="h-dvh flex flex-col overflow-hidden bg-white dark:bg-card">
@@ -302,46 +289,36 @@ function MobileTasksViewContent() {
             </button>
           </div>
         ) : (
-          <div className="px-5 pb-8">
-            {groups.map((group) => {
-              const isCollapsed = collapsedSections.has(group.id);
+          <div className="px-5 pt-5 pb-8 flex flex-col gap-2.5">
+            {tasks.map((t) => {
+              const dept = allDepts.find((d) => d.id === t.department_id);
+              const DeptIcon = getDepartmentIcon(dept?.icon);
+              const isSelected = selectedTask?.task_id === t.task_id;
               return (
-                <div key={group.id} className="pt-5">
-                  <TaskSectionHeader
-                    label={group.label}
-                    collapsed={isCollapsed}
-                    onToggle={() => toggleSection(group.id)}
-                  />
-
-                  {!isCollapsed && (
-                    <div className="flex flex-col gap-2.5">
-                      {group.items.map((t) => {
-                        const dept = allDepts.find((d) => d.id === t.department_id);
-                        const DeptIcon = getDepartmentIcon(dept?.icon);
-                        const isSelected = selectedTask?.task_id === t.task_id;
-                        return (
-                          <MobileTaskRow
-                            key={`task-${t.task_id}`}
-                            item={toRowItem(t)}
-                            selected={isSelected}
-                            showDateInline={group.kind !== 'day'}
-                            overdue={group.kind === 'overdue'}
-                            onClick={() => {
-                              if (isSelected) {
-                                setSelectedTask(null);
-                              } else {
-                                closeGlobals();
-                                setCreatingOpen(false);
-                                setSelectedTask(t);
-                              }
-                            }}
-                            departmentIcon={DeptIcon}
-                          />
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                <MobileTaskRow
+                  key={`task-${t.task_id}`}
+                  item={toRowItem(t)}
+                  selected={isSelected}
+                  // Flat ledger: no section headers to carry dates, so every
+                  // card shows its own. Past-due open tasks keep the urgent
+                  // red — it's the only overdue signal left.
+                  showDateInline
+                  overdue={
+                    !!t.scheduled_date &&
+                    t.scheduled_date < today &&
+                    t.status !== 'complete'
+                  }
+                  onClick={() => {
+                    if (isSelected) {
+                      setSelectedTask(null);
+                    } else {
+                      closeGlobals();
+                      setCreatingOpen(false);
+                      setSelectedTask(t);
+                    }
+                  }}
+                  departmentIcon={DeptIcon}
+                />
               );
             })}
           </div>
