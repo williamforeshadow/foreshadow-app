@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+import { Drawer } from 'vaul';
 import { ReservationContextPanel } from '@/components/reservations/ReservationContextPanel';
 import type { ProposedTaskData } from '@/components/messages/ProposedTask';
 import type { ReservationContextTask } from '@/components/reservations/useReservationContext';
@@ -10,14 +9,16 @@ import type { ConversationRow } from '@/lib/conversations';
 // Mobile "top sheet" for the conversation's reservation context — the same
 // ReservationContextPanel the desktop right rail renders (reservation summary,
 // sentiment, associated + proposed tasks). Slides down from the top over the
-// thread, opened from the top-bar "details" button. Backdrop tap or the close
-// button dismisses it.
+// thread, opened from the top-bar "details" button.
+//
+// Built on vaul (direction="top") so it's a physical object like every other
+// drawer: drag it back up to dismiss (vaul arbitrates against the inner
+// scroll), or tap the scrim / press Escape. The grab handle sits on its
+// bottom edge — the pullable edge of a top sheet.
 //
 // Opening a task or a proposal from inside the sheet is the parent's job (it
 // owns the full-screen task / proposal overlays); the parent closes the sheet
 // as part of those handlers so overlays never stack behind it.
-
-const ANIM_MS = 280;
 
 export function MobileConversationDetailSheet({
   open,
@@ -38,97 +39,48 @@ export function MobileConversationDetailSheet({
   onOpenProposal: (proposal: ProposedTaskData) => void;
   onProposedTaskChange: () => void;
 }) {
-  // Keep the sheet mounted through its exit transition: `shouldRender` gates the
-  // DOM, `shown` drives the slide/opacity. Mount-on-open and start-of-exit are
-  // render-time adjustments (React's recommended pattern); the deferred flips
-  // (enter after paint, unmount after the slide) run in effects via rAF/timeout.
-  const [shouldRender, setShouldRender] = useState(open);
-  const [shown, setShown] = useState(false);
-
-  if (open && !shouldRender) setShouldRender(true);
-  if (!open && shown) setShown(false);
-
-  // Enter: flip `shown` on once the mounted (translated-up) sheet has painted.
-  useEffect(() => {
-    if (!open) return;
-    let raf2 = 0;
-    const raf1 = requestAnimationFrame(() => {
-      raf2 = requestAnimationFrame(() => setShown(true));
-    });
-    return () => {
-      cancelAnimationFrame(raf1);
-      cancelAnimationFrame(raf2);
-    };
-  }, [open]);
-
-  // Exit: unmount after the slide-out transition finishes.
-  useEffect(() => {
-    if (open || !shouldRender) return;
-    const t = setTimeout(() => setShouldRender(false), ANIM_MS);
-    return () => clearTimeout(t);
-  }, [open, shouldRender]);
-
-  // Escape closes.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
-  if (!shouldRender) return null;
-
   return (
-    <div className="fixed inset-0 z-[60]">
-      {/* Backdrop */}
-      <button
-        type="button"
-        aria-label="Close details"
-        onClick={onClose}
-        className={`absolute inset-0 bg-black/40 transition-opacity duration-[280ms] ${
-          shown ? 'opacity-100' : 'opacity-0'
-        }`}
-      />
+    <Drawer.Root
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) onClose();
+      }}
+      direction="top"
+      repositionInputs={false}
+    >
+      <Drawer.Portal>
+        <Drawer.Overlay className="fixed inset-0 z-[60] bg-black/40" />
+        <Drawer.Content
+          aria-describedby={undefined}
+          aria-label="Reservation details"
+          className="safe-area-top fixed inset-x-0 top-0 z-[60] flex max-h-[88dvh] flex-col overflow-hidden rounded-b-[1.5rem] border-b border-[var(--surface-elevated-line)] bg-white shadow-2xl outline-none dark:bg-card"
+        >
+          <div className="msg-divider flex shrink-0 items-center border-b px-4 py-2.5">
+            <Drawer.Title asChild>
+              <h2 className="text-sm font-semibold text-foreground">Details</h2>
+            </Drawer.Title>
+          </div>
 
-      {/* Sheet — anchored to the top, slides down. */}
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Reservation details"
-        className={`safe-area-top absolute inset-x-0 top-0 flex max-h-[88dvh] flex-col overflow-hidden rounded-b-[1.5rem] border-b border-[var(--surface-elevated-line)] bg-white shadow-2xl transition-transform duration-[280ms] ease-[cubic-bezier(0.16,1,0.3,1)] dark:bg-card ${
-          shown ? 'translate-y-0' : '-translate-y-full'
-        }`}
-      >
-        <div className="msg-divider flex shrink-0 items-center justify-between gap-2 border-b px-4 py-2.5">
-          <h2 className="text-sm font-semibold text-foreground">Details</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-black/[0.05] hover:text-foreground dark:hover:bg-white/[0.06]"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+          {/* The scroll container. It — not the shared panel's own `h-full`
+              overflow — owns the scroll: under a flex parent with min-h-0 the
+              panel's percentage height collapses to its content height on iOS, so
+              its inner overflow never engages and the details get clipped. Making
+              this wrapper the scroller sidesteps that entirely. */}
+          <div className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar [-webkit-overflow-scrolling:touch]">
+            <ReservationContextPanel
+              conversation={conversation}
+              proposedTasks={proposedTasks}
+              tasksRefreshKey={tasksRefreshKey}
+              onOpenTask={onOpenTask}
+              onOpenProposal={onOpenProposal}
+              onProposedTaskChange={onProposedTaskChange}
+            />
+          </div>
 
-        {/* The scroll container. It — not the shared panel's own `h-full`
-            overflow — owns the scroll: under a flex parent with min-h-0 the
-            panel's percentage height collapses to its content height on iOS, so
-            its inner overflow never engages and the details get clipped. Making
-            this wrapper the scroller sidesteps that entirely. */}
-        <div className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar [-webkit-overflow-scrolling:touch]">
-          <ReservationContextPanel
-            conversation={conversation}
-            proposedTasks={proposedTasks}
-            tasksRefreshKey={tasksRefreshKey}
-            onOpenTask={onOpenTask}
-            onOpenProposal={onOpenProposal}
-            onProposedTaskChange={onProposedTaskChange}
-          />
-        </div>
-      </div>
-    </div>
+          {/* Grab handle on the pullable (bottom) edge. */}
+          <div className="mx-auto mb-2 mt-2.5 h-1 w-9 shrink-0 rounded-full bg-black/15 dark:bg-white/20" />
+        </Drawer.Content>
+      </Drawer.Portal>
+    </Drawer.Root>
   );
 }

@@ -358,8 +358,10 @@ export default function ConversationPage() {
             <div className="shrink-0">{topBarActions}</div>
           </div>
           {conversation && (conversation.property_name || stayRange) ? (
-            <div className="px-[22px] pt-0.5 pb-2">
-              <div className="flex items-center gap-3 min-w-0 text-[11px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
+            // pl-[52px] = the title row's px-2 + the 40px back chevron + its
+            // 4px gap, so this line starts flush with the guest name above it.
+            <div className="pl-[52px] pr-[22px] pt-0.5 pb-2">
+              <div className="flex items-center gap-3 min-w-0 text-[12.5px] text-neutral-500 dark:text-[#66645f] uppercase tracking-[0.04em] font-medium">
                 {conversation.property_name ? (
                   <span className="truncate">{conversation.property_name}</span>
                 ) : null}
