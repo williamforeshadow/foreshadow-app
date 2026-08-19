@@ -76,6 +76,12 @@ interface DayDetailPanelProps {
    */
   onNewTask?: (dateStr: string) => void;
   /**
+   * Hide the X close button — for mobile, where the panel lives inside a
+   * vaul drawer and dismissal is the drag / scrim / Escape, per the drawer
+   * standard. Desktop's right-column panel keeps the X.
+   */
+  hideClose?: boolean;
+  /**
    * Reservations whose stay window covers this day (check_in <= date <=
    * check_out). When provided + non-empty, an "Active reservation(s)"
    * section renders above "Tasks scheduled" with one clickable row per
@@ -116,6 +122,7 @@ export function DayDetailPanel({
   onTaskClick,
   showPropertyOnRows = false,
   onNewTask,
+  hideClose = false,
   activeReservations,
   onReservationClick,
 }: DayDetailPanelProps) {
@@ -156,23 +163,27 @@ export function DayDetailPanel({
             </div>
           )}
         </div>
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
           {onNewTask && (
+            // The standard create affordance — the same purple + circle the
+            // mobile filter bars use.
             <button
               onClick={() => onNewTask(dateStr)}
-              className="h-8 pl-2 pr-3 rounded-lg border border-[rgba(30,25,20,0.08)] dark:border-white/10 text-[12px] font-medium text-neutral-700 dark:text-[#e5e4e2] hover:bg-[var(--accent-bg-soft)] dark:hover:bg-[var(--accent-bg-soft-dark)] hover:text-[var(--accent-3)] dark:hover:text-[var(--accent-1)] transition-colors flex items-center gap-1.5"
+              className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[var(--accent-3)] text-white hover:bg-[var(--accent-4)] dark:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] dark:text-[#1a1a1a] transition-colors"
+              aria-label="New task"
             >
-              <Plus size={13} />
-              <span>New task</span>
+              <Plus size={16} strokeWidth={2.5} />
             </button>
           )}
-          <button
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-neutral-100 dark:hover:bg-white/5 text-neutral-500 dark:text-[#a09e9a]"
-            aria-label="Close"
-          >
-            <X size={16} />
-          </button>
+          {!hideClose && (
+            <button
+              onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-neutral-100 dark:hover:bg-white/5 text-neutral-500 dark:text-[#a09e9a]"
+              aria-label="Close"
+            >
+              <X size={16} />
+            </button>
+          )}
         </div>
       </div>
 

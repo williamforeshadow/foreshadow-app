@@ -13,6 +13,7 @@ import { useDepartments } from '@/lib/departmentsContext';
 import { useProperties } from '@/lib/queries';
 import type { Task } from '@/lib/types';
 import { DayDetailPanel, type DayDetailReservation } from '@/components/tasks/DayDetailPanel';
+import { DayDetailDrawer } from '@/components/tasks/DayDetailDrawer';
 import type { TaskRowItem } from '@/components/tasks/TaskRow';
 import { MobileTaskFilterBar } from '@/components/mobile/MobileTaskFilterBar';
 import { LoadingState } from '@/components/ui/loading-state';
@@ -786,35 +787,30 @@ export default function MobileTimelineView({
         };
 
         return (
-          <div className="fixed inset-0 z-50">
-            <div
-              className="absolute inset-0 bg-black/20 dark:bg-black/40"
-              onClick={() => setExpandedCell(null)}
+          <DayDetailDrawer open onClose={() => setExpandedCell(null)}>
+            <DayDetailPanel
+              date={date}
+              title={expandedCell.property}
+              onClose={() => setExpandedCell(null)}
+              hideClose
+              tasks={dayTasks}
+              onTaskClick={handleTaskClickFromDrawer}
+              activeReservations={activeReservations}
+              onReservationClick={(reservationId) => {
+                setExpandedCell(null);
+                openReservationViewer(reservationId);
+              }}
+              onNewTask={
+                onNewTask
+                  ? (dateStr) => {
+                      const property = expandedCell.property;
+                      setExpandedCell(null);
+                      onNewTask({ propertyName: property, dateStr });
+                    }
+                  : undefined
+              }
             />
-            <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-background border-t border-[rgba(30,25,20,0.08)] dark:border-white/10 rounded-t-2xl shadow-2xl max-h-[75vh] flex flex-col">
-              <DayDetailPanel
-                date={date}
-                title={expandedCell.property}
-                onClose={() => setExpandedCell(null)}
-                tasks={dayTasks}
-                onTaskClick={handleTaskClickFromDrawer}
-                activeReservations={activeReservations}
-                onReservationClick={(reservationId) => {
-                  setExpandedCell(null);
-                  openReservationViewer(reservationId);
-                }}
-                onNewTask={
-                  onNewTask
-                    ? (dateStr) => {
-                        const property = expandedCell.property;
-                        setExpandedCell(null);
-                        onNewTask({ propertyName: property, dateStr });
-                      }
-                    : undefined
-                }
-              />
-            </div>
-          </div>
+          </DayDetailDrawer>
         );
       })()}
     </div>

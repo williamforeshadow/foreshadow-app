@@ -12,9 +12,14 @@ import type { ConversationRow } from '@/lib/conversations';
 // thread, opened from the top-bar "details" button.
 //
 // Built on vaul (direction="top") so it's a physical object like every other
-// drawer: drag it back up to dismiss (vaul arbitrates against the inner
-// scroll), or tap the scrim / press Escape. The grab handle sits on its
-// bottom edge — the pullable edge of a top sheet.
+// drawer: drag it back up to dismiss, or tap the scrim / press Escape.
+//
+// The task-card list must stay scrollable, and vaul's drag-vs-scroll
+// arbitration is built for BOTTOM drawers (it yields to scroll only when
+// scrollTop > 0) — on a top drawer that makes "scroll down through the
+// cards" and "dismiss" the same upward gesture. So the scroll region is
+// marked data-vaul-no-drag: swipes over the list always scroll, and
+// dismissal is a deliberate pull on the header or the bottom grab strip.
 //
 // Opening a task or a proposal from inside the sheet is the parent's job (it
 // owns the full-screen task / proposal overlays); the parent closes the sheet
@@ -66,7 +71,10 @@ export function MobileConversationDetailSheet({
               panel's percentage height collapses to its content height on iOS, so
               its inner overflow never engages and the details get clipped. Making
               this wrapper the scroller sidesteps that entirely. */}
-          <div className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar [-webkit-overflow-scrolling:touch]">
+          <div
+            data-vaul-no-drag
+            className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar [-webkit-overflow-scrolling:touch]"
+          >
             <ReservationContextPanel
               conversation={conversation}
               proposedTasks={proposedTasks}
@@ -77,8 +85,11 @@ export function MobileConversationDetailSheet({
             />
           </div>
 
-          {/* Grab handle on the pullable (bottom) edge. */}
-          <div className="mx-auto mb-2 mt-2.5 h-1 w-9 shrink-0 rounded-full bg-black/15 dark:bg-white/20" />
+          {/* Grab strip on the pullable (bottom) edge — a full-width touch
+              target, since it and the header are the only drag zones. */}
+          <div className="flex shrink-0 items-center justify-center py-3">
+            <div className="h-1 w-9 rounded-full bg-black/15 dark:bg-white/20" />
+          </div>
         </Drawer.Content>
       </Drawer.Portal>
     </Drawer.Root>
