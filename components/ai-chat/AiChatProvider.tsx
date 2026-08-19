@@ -56,7 +56,10 @@ export function AiChatProvider({ children }: { children: ReactNode }) {
         toggle();
         return;
       }
-      if (e.key === 'Escape') {
+      // Skip when a layer inside the chat already handled this Escape (the
+      // mobile drawer backs out search → history → close one step at a time
+      // and preventDefaults the steps it consumes).
+      if (e.key === 'Escape' && !e.defaultPrevented) {
         setIsOpen((o) => (o ? false : o));
       }
     };

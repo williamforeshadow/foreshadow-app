@@ -174,6 +174,9 @@ export function DrillDownFilterPicker({
       open={open}
       onOpenChange={handleOpenChange}
       title={title}
+      // Drilled-in views draw their own header (back row + label) so the
+      // chrome title only shows on the root list.
+      titleHidden={view !== 'root'}
       trigger={renderTrigger(activeCount)}
       contentClassName="w-80"
       scrollAreaClassName="max-h-[min(65vh,480px)]"
@@ -213,7 +216,20 @@ export function DrillDownFilterPicker({
         </div>
       ) : activeRange ? (
         <div className="pb-1">
-          <BackRow onBack={() => setView('root')} />
+          <div className="flex items-center justify-between gap-3 pb-3.5">
+            <BackRow onBack={() => setView('root')} />
+            {(activeRange.range.from || activeRange.range.to) && (
+              <button
+                type="button"
+                onClick={() => activeRange.onChange({ from: null, to: null })}
+                className="text-[11px] uppercase tracking-[0.06em] font-medium"
+                style={{ color: 'var(--task-ink-3)' }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <AxisLabel>{activeRange.label}</AxisLabel>
           <DateRangeFields range={activeRange.range} onChange={activeRange.onChange} />
         </div>
       ) : activeAxis ? (
@@ -313,7 +329,7 @@ function BackRow({ onBack }: { onBack: () => void }) {
     <button
       type="button"
       onClick={onBack}
-      className="flex items-center gap-1 px-1 pb-2 text-[13px] font-medium"
+      className="flex items-center gap-1 px-1 text-[13px] font-medium"
       style={{ color: 'var(--task-ink-3)' }}
     >
       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -321,6 +337,20 @@ function BackRow({ onBack }: { onBack: () => void }) {
       </svg>
       All filters
     </button>
+  );
+}
+
+// The field label inside a drilled-in view — styled exactly like the picker
+// chrome's title, but rendered below the back row per the drill-in order:
+// back row (with actions top-right) → label → search → options.
+function AxisLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="px-1 pb-2 font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
+      style={{ color: 'var(--task-ink-3)' }}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -345,24 +375,10 @@ function AxisOptionList({ axis, onBack }: { axis: FilterAxisSpec; onBack: () => 
 
   return (
     <div className="pb-1">
-      <BackRow onBack={onBack} />
-
-      {axis.searchable && (
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search…"
-          className="mb-2 w-full rounded-lg border bg-transparent px-3 py-2 text-[14px] focus:outline-none"
-          style={{
-            borderColor: 'var(--task-line)',
-            color: 'var(--task-ink-1)',
-          }}
-        />
-      )}
-
-      {(axis.selected.size > 0 || axis.selected.size < axis.options.length) && (
-        <div className="flex items-center gap-4 px-1 pb-1.5">
+      {/* Header row: back on the left, Select all / Clear top-right. */}
+      <div className="flex items-center justify-between gap-3 pb-3.5">
+        <BackRow onBack={onBack} />
+        <div className="flex items-center gap-4">
           {axis.selected.size < axis.options.length && (
             <button
               type="button"
@@ -384,6 +400,22 @@ function AxisOptionList({ axis, onBack }: { axis: FilterAxisSpec; onBack: () => 
             </button>
           )}
         </div>
+      </div>
+
+      <AxisLabel>{axis.label}</AxisLabel>
+
+      {axis.searchable && (
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search…"
+          className="mb-2 w-full rounded-lg border bg-transparent px-3 py-2 text-[14px] focus:outline-none"
+          style={{
+            borderColor: 'var(--task-line)',
+            color: 'var(--task-ink-1)',
+          }}
+        />
       )}
 
       {filtered.length === 0 ? (
@@ -496,16 +528,6 @@ function DateRangeFields({
           style={{ borderColor: 'var(--task-line)', color: 'var(--task-ink-1)' }}
         />
       </label>
-      {(range.from || range.to) && (
-        <button
-          type="button"
-          onClick={() => onChange({ from: null, to: null })}
-          className="self-start px-0.5 py-1 text-[11px] uppercase tracking-[0.06em] font-medium"
-          style={{ color: 'var(--task-ink-3)' }}
-        >
-          Clear range
-        </button>
-      )}
     </div>
   );
 }

@@ -13,6 +13,7 @@ export function AdaptivePicker({
   open,
   onOpenChange,
   title,
+  titleHidden = false,
   trigger,
   children,
   align = 'start',
@@ -23,6 +24,9 @@ export function AdaptivePicker({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
+  /** Keep the title for a11y but render it invisibly — for content that
+   *  draws its own header (e.g. the filter drill-in's back row + label). */
+  titleHidden?: boolean;
   trigger: React.ReactNode;
   children: React.ReactNode;
   align?: 'start' | 'center' | 'end';
@@ -44,7 +48,12 @@ export function AdaptivePicker({
         <span onClick={() => onOpenChange(true)} className="contents">
           {trigger}
         </span>
-        <TaskSheet open={open} onOpenChange={onOpenChange} title={title}>
+        <TaskSheet
+          open={open}
+          onOpenChange={onOpenChange}
+          title={title}
+          titleHidden={titleHidden}
+        >
           {children}
         </TaskSheet>
       </>
@@ -63,8 +72,12 @@ export function AdaptivePicker({
         }}
       >
         <div
-          className="px-2.5 pt-1.5 pb-2 font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
-          style={{ color: 'var(--task-ink-3)' }}
+          className={
+            titleHidden
+              ? 'sr-only'
+              : 'px-2.5 pt-1.5 pb-2 font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]'
+          }
+          style={titleHidden ? undefined : { color: 'var(--task-ink-3)' }}
         >
           {title}
         </div>

@@ -17,6 +17,7 @@ export function TaskSheet({
   open,
   onOpenChange,
   title,
+  titleHidden = false,
   children,
   className,
   overlayClassName,
@@ -24,6 +25,9 @@ export function TaskSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
+  /** Keep the title for a11y but render it invisibly — for content that
+   *  draws its own header (e.g. the filter drill-in's back row + label). */
+  titleHidden?: boolean;
   children: React.ReactNode;
   /** For callers that live above the sheet's default z-50 — the agent chat
    *  drawer, for one. Pass the same z to both or the dim lands behind. */
@@ -82,8 +86,12 @@ export function TaskSheet({
           />
           <Drawer.Title asChild>
             <div
-              className="px-[18px] pt-3 pb-3 font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]"
-              style={{ color: 'var(--task-ink-3)' }}
+              className={
+                titleHidden
+                  ? 'sr-only'
+                  : 'px-[18px] pt-3 pb-3 font-mono text-[length:var(--task-fs-label)] uppercase tracking-[0.14em]'
+              }
+              style={titleHidden ? undefined : { color: 'var(--task-ink-3)' }}
             >
               {title}
             </div>
@@ -93,7 +101,9 @@ export function TaskSheet({
               case) flex-grow has no free space to hand out, so the 65vh cap
               still governs. */}
           <div
-            className="px-[18px] pb-[calc(1.75rem+env(safe-area-inset-bottom))] max-h-[65vh] flex-1 min-h-0 overflow-y-auto"
+            className={`px-[18px] pb-[calc(1.75rem+env(safe-area-inset-bottom))] max-h-[65vh] flex-1 min-h-0 overflow-y-auto ${
+              titleHidden ? 'pt-2' : ''
+            }`}
           >
             {children}
           </div>

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import { useRouter } from 'next/navigation';
+import { Drawer } from 'vaul';
 import {
   ArrowUp,
   History,
@@ -65,12 +66,6 @@ import styles from './MobileAgentChat.module.css';
 
 const ANIM_MS = 300;
 const GAP = 12; // breathing room between the newest message and the input
-// Swipe-down dismissal: far enough that a scroll overshoot isn't a close, or a
-// flick fast enough that the distance clearly wasn't the point.
-const DISMISS_PX = 96;
-const DISMISS_VELOCITY = 0.5; // px/ms
-// The grab strip along the drawer's top edge, level with the corner buttons.
-const DRAG_STRIP = 56;
 // What the New chat pill reserves at the bottom of the chats screen.
 const NEW_CHAT_H = 64;
 
@@ -162,62 +157,13 @@ export function MobileAgentChat() {
   const fieldRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Overlay enter/exit: `shouldRender` gates the DOM, `shown` drives the
-  // backdrop + input transitions.
-  const [shouldRender, setShouldRender] = useState(isOpen);
-  const [shown, setShown] = useState(false);
   // Measured input-bar height, so the scroll region can be sized to exactly the
   // visible area above the floating input (see scrollMaxHeight).
   const [inputH, setInputH] = useState(52);
 
-  // Swipe-to-dismiss. `dragY` is how far the sheet has been pulled down; while
-  // `dragging` it drives BOTH layers inline (transitions off) so the drawer and
-  // the floating input travel together instead of the input staying pinned
-  // mid-screen. See onTouchStart for when a touch becomes a drag.
-  const [dragY, setDragY] = useState(0);
-  const [dragging, setDragging] = useState(false);
-  const dragStart = useRef<{ y: number; lastY: number; lastT: number } | null>(
-    null,
-  );
-  const dragLive = useRef(false);
-  // Offset and velocity are read on touchend, which can beat the render that
-  // would have refreshed them in a closure — so they live in refs.
-  const dragOffset = useRef(0);
-  const dragVelocity = useRef(0);
-
-  if (isOpen && !shouldRender) setShouldRender(true);
-  if (!isOpen && shown) setShown(false);
-
-  // The drawer is part of opening the chat, not a reward for sending: it mounts
-  // with the overlay and simply starts empty. That also puts the new-chat and
-  // history buttons (which live in its header) within reach from a fresh chat.
-  const drawerMounted = shouldRender;
-  const [drawerIn, setDrawerIn] = useState(false);
-
-  // Enter the overlay just after mount so the input transitions up.
-  useEffect(() => {
-    if (!isOpen) return;
-    const t = window.setTimeout(() => setShown(true), 16);
-    return () => window.clearTimeout(t);
-  }, [isOpen]);
-
-  // Unmount after the exit transition.
-  useEffect(() => {
-    if (isOpen || !shouldRender) return;
-    const t = window.setTimeout(() => setShouldRender(false), ANIM_MS);
-    return () => window.clearTimeout(t);
-  }, [isOpen, shouldRender]);
-
-  // Slide the drawer up a beat after it mounts, so it rises behind the input
-  // rather than snapping in.
-  useEffect(() => {
-    if (!drawerMounted) {
-      setDrawerIn(false);
-      return;
-    }
-    const t = window.setTimeout(() => setDrawerIn(true), 16);
-    return () => window.clearTimeout(t);
-  }, [drawerMounted]);
+  // Enter/exit animation, swipe-to-dismiss (with velocity + rubber-band),
+  // scrim tap, and body scroll locking are all vaul's job now — the drawer is
+  // a controlled <Drawer.Root>, so this component only owns what's inside it.
 
   // Focus the input when the chat opens (raises the keyboard). preventScroll so
   // the app itself doesn't shift — only the input rides up.
@@ -228,16 +174,6 @@ export function MobileAgentChat() {
       ANIM_MS - 40,
     );
     return () => window.clearTimeout(t);
-  }, [isOpen]);
-
-  // Lock body scroll while open.
-  useEffect(() => {
-    if (!isOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
   }, [isOpen]);
 
   // iOS only: switch the WebView to keyboard-overlay mode while the chat is open
@@ -251,25 +187,6 @@ export function MobileAgentChat() {
       setChatKeyboardOverlay(false);
     };
   }, [isOpen]);
-
-  // Escape backs out one layer at a time — search, then the chats screen, then
-  // the chat itself — rather than throwing away three states at once.
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (searching) {
-        setSearching(false);
-        setQuery('');
-      } else if (showHistory) {
-        setShowHistory(false);
-      } else {
-        close();
-      }
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [isOpen, close, searching, showHistory]);
 
   // Grow the textarea with its content (capped, then it scrolls internally).
   useEffect(() => {
@@ -292,21 +209,14 @@ export function MobileAgentChat() {
     // The chats screen unmounts the input entirely, so the observer has to be
     // re-attached to the new element on the way back — not left watching a node
     // that's no longer in the document.
-  }, [shouldRender, showHistory]);
+  }, [isOpen, showHistory]);
 
   // Keep the newest message in view as messages arrive, the keyboard toggles,
   // or the geometry shifts (all change how tall the scroll region is).
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, isLoading, keyboardInset, inputH, drawerMounted]);
-
-  // Leave no drag offset behind for the next open.
-  useEffect(() => {
-    if (isOpen) return;
-    setDragging(false);
-    setDragY(0);
-  }, [isOpen]);
+  }, [messages, isLoading, keyboardInset, inputH, isOpen]);
 
   const handleInternalNav = (
     e: React.MouseEvent<HTMLAnchorElement>,
@@ -374,72 +284,13 @@ export function MobileAgentChat() {
     leaveHistory();
   };
 
-  // A downward pull dismisses the sheet. It arms from the strip along the top
-  // of the drawer — always draggable, the way a sheet's grab area is — or from
-  // anywhere once the thread is scrolled to the top. Not mid-thread: scrolling
-  // back up through a conversation must not throw the chat away, and the thread
-  // sits scrolled to the bottom most of the time, so the top strip is the only
-  // thing that makes the gesture reachable at all.
-  const onDragStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (e.touches.length !== 1) return;
-    const fromTopStrip =
-      e.touches[0].clientY - e.currentTarget.getBoundingClientRect().top <
-      DRAG_STRIP;
-    if (!fromTopStrip && (scrollRef.current?.scrollTop ?? 0) > 0) return;
-    const y = e.touches[0].clientY;
-    dragStart.current = { y, lastY: y, lastT: e.timeStamp };
-    dragOffset.current = 0;
-    dragVelocity.current = 0;
-  };
-
-  const onDragMove = (e: React.TouchEvent) => {
-    const start = dragStart.current;
-    if (!start) return;
-    const y = e.touches[0].clientY;
-    const dy = y - start.y;
-    if (!dragLive.current) {
-      // Wait for a deliberate downward pull, so a tap or a horizontal swipe
-      // doesn't lurch the sheet.
-      if (dy < 6) return;
-      dragLive.current = true;
-      setDragging(true);
-      // One gesture, one outcome: the keyboard goes down with the sheet rather
-      // than eating the first swipe.
-      taRef.current?.blur();
-    }
-    const dt = e.timeStamp - start.lastT;
-    if (dt > 0) dragVelocity.current = (y - start.lastY) / dt;
-    start.lastY = y;
-    start.lastT = e.timeStamp;
-    dragOffset.current = Math.max(0, dy);
-    setDragY(dragOffset.current);
-  };
-
-  const onDragEnd = () => {
-    const wasLive = dragLive.current;
-    dragStart.current = null;
-    dragLive.current = false;
-    if (!wasLive) return;
-    // Drop the inline transform in the same commit as the close, so the drawer
-    // transitions from where the finger left it rather than snapping back up
-    // first.
-    setDragging(false);
-    setDragY(0);
-    if (
-      dragOffset.current > DISMISS_PX ||
-      dragVelocity.current > DISMISS_VELOCITY
-    ) {
-      close();
-    }
-  };
-
   const trimmedInput = inputValue.trim().toLowerCase();
   const commandMatches = trimmedInput.startsWith('/')
     ? AGENT_COMMANDS.filter((c) => c.name.startsWith(trimmedInput))
     : [];
   const showCommandMenu = commandMatches.length > 0 && !isLoading;
 
-  if (isMobile !== true || !shouldRender) return null;
+  if (isMobile !== true) return null;
 
   // The floating input sits 8px above the screen bottom (above the keyboard when
   // up, above the home indicator when down); it stacks input height + a gap.
@@ -462,36 +313,44 @@ export function MobileAgentChat() {
       ? `calc(85dvh - ${keyboardInset + bottomReserve}px)`
       : `calc(85dvh - ${bottomReserve}px - env(safe-area-inset-bottom))`;
 
-  // While dragging, both layers are driven inline with transitions off so they
-  // track the finger; on release the classes take over again.
-  const dragStyle = dragging
-    ? { transform: `translateY(${dragY}px)`, transition: 'none' }
-    : undefined;
-
   return (
-    <>
-      <button
-        type="button"
-        aria-label="Close chat"
-        onClick={close}
-        className={`${styles.backdrop} ${
-          shown ? styles.backdropShown : styles.backdropHidden
-        }`}
-      />
-
-      {drawerMounted && (
-        <div
-          className={`${styles.drawer} ${
-            drawerIn && shown ? styles.drawerShown : styles.drawerHidden
-          }`}
-          style={dragStyle}
-          onTouchStart={onDragStart}
-          onTouchMove={onDragMove}
-          onTouchEnd={onDragEnd}
-          onTouchCancel={onDragEnd}
-          role="dialog"
+    <Drawer.Root
+      open={isOpen}
+      onOpenChange={(v) => {
+        if (!v) close();
+      }}
+      // The app's Capacitor keyboard system owns input repositioning (the
+      // floating input tracks the inset itself); vaul must not fight it.
+      repositionInputs={false}
+      // One gesture, one outcome: the keyboard goes down with the sheet
+      // rather than eating the first swipe.
+      onDrag={() => {
+        if (document.activeElement === taRef.current) taRef.current?.blur();
+      }}
+    >
+      <Drawer.Portal>
+        <Drawer.Overlay className={styles.backdrop} onClick={close} />
+        <Drawer.Content
+          className={styles.drawer}
+          aria-describedby={undefined}
           aria-label="Foreshadow AI chat"
+          // The timed effect above focuses the input deliberately; Radix's
+          // open-autofocus would race it (and the keyboard choreography).
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          // Escape backs out one layer at a time — search, then the chats
+          // screen, then (via Radix's default) the chat itself.
+          onEscapeKeyDown={(e) => {
+            if (searching) {
+              e.preventDefault();
+              setSearching(false);
+              setQuery('');
+            } else if (showHistory) {
+              e.preventDefault();
+              setShowHistory(false);
+            }
+          }}
         >
+          <Drawer.Title className="sr-only">Foreshadow AI chat</Drawer.Title>
           {/* Floating chrome: history top-left, with the thread running
               underneath and fading out behind it. Siblings of the scroll
               region, not children, so its fade mask leaves them alone.
@@ -568,9 +427,6 @@ export function MobileAgentChat() {
             }`}
             style={{
               maxHeight: scrollMaxHeight,
-              // Nothing to scroll mid-drag: the sheet is the thing moving, and
-              // an iOS rubber-band underneath it reads as a second surface.
-              overflowY: dragging ? 'hidden' : undefined,
             }}
           >
             <div className={styles.messages}>
@@ -681,23 +537,19 @@ export function MobileAgentChat() {
               )}
             </div>
           </div>
-        </div>
-      )}
 
-      {/* The chats screen gets a New chat pill where the composer would be. A
-          composer there would invite typing into a conversation that hasn't
-          been chosen yet. */}
-      {showHistory && (
-        <div
-          className={`${styles.inputWrap} ${styles.newChatWrap} ${
-            shown ? styles.inputShown : styles.inputHidden
-          }`}
-          style={{
-            bottom: keyboardInset,
-            paddingBottom: inputPadBottom,
-            ...dragStyle,
-          }}
-        >
+          {/* The chats screen gets a New chat pill where the composer would
+              be. A composer there would invite typing into a conversation that
+              hasn't been chosen yet. Both bottom layers live INSIDE the vaul
+              content (absolute, not fixed) so they ride the drawer's drag. */}
+          {showHistory && (
+            <div
+              className={`${styles.inputWrap} ${styles.newChatWrap}`}
+              style={{
+                bottom: keyboardInset,
+                paddingBottom: inputPadBottom,
+              }}
+            >
           <button
             type="button"
             className={styles.newChatPill}
@@ -712,20 +564,18 @@ export function MobileAgentChat() {
         </div>
       )}
 
-      {/* Floating input — a separate fixed layer pinned above the keyboard,
-          independent of the drawer. pointer-events pass through the wrapper so
-          taps beside the field fall through to the backdrop. */}
-      {!showHistory && (
-        <div
-          className={`${styles.inputWrap} ${
-            shown ? styles.inputShown : styles.inputHidden
-          }`}
-          style={{
-            bottom: keyboardInset,
-            paddingBottom: inputPadBottom,
-            ...dragStyle,
-          }}
-        >
+          {/* Floating input — its own layer pinned above the keyboard,
+              absolutely positioned within the drawer so it travels with it.
+              pointer-events pass through the wrapper so taps beside the field
+              fall through. */}
+          {!showHistory && (
+            <div
+              className={styles.inputWrap}
+              style={{
+                bottom: keyboardInset,
+                paddingBottom: inputPadBottom,
+              }}
+            >
           {showCommandMenu && (
             <div className={styles.commandMenu}>
               {commandMatches.map((c) => (
@@ -805,8 +655,10 @@ export function MobileAgentChat() {
               </button>
             </div>
           </div>
-        </div>
-      )}
-    </>
+            </div>
+          )}
+        </Drawer.Content>
+      </Drawer.Portal>
+    </Drawer.Root>
   );
 }

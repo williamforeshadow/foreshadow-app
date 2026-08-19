@@ -12,6 +12,7 @@
  * are whole color values, used directly as var(--token) — never wrapped in
  * hsl(). */
 
+/* vaul owns the overlay's fade (it also tracks drag progress). */
 .backdrop {
   position: fixed;
   inset: 0;
@@ -21,13 +22,6 @@
   padding: 0;
   background: rgba(0, 0, 0, 0.42);
   cursor: default;
-  transition: opacity 260ms ease;
-}
-.backdropHidden {
-  opacity: 0;
-}
-.backdropShown {
-  opacity: 1;
 }
 
 /* ── Drawer ──────────────────────────────────────────────────────────── */
@@ -47,32 +41,14 @@
   border-bottom: none;
   box-shadow: 0 -12px 48px -10px rgba(0, 0, 0, 0.22);
   overflow: hidden;
-  transition:
-    transform 300ms cubic-bezier(0.16, 1, 0.3, 1),
-    opacity 200ms ease;
+  /* Enter/exit/drag transforms are vaul's — no transition here or the two
+     animation systems fight. */
   will-change: transform;
 }
 :global(.dark) .drawer {
   background: #141416;
   border-color: rgba(255, 255, 255, 0.08);
   box-shadow: 0 -12px 48px -10px rgba(0, 0, 0, 0.62);
-}
-.drawerHidden {
-  transform: translateY(100%);
-  opacity: 0.6;
-}
-.drawerShown {
-  transform: translateY(0);
-  opacity: 1;
-}
-@media (prefers-reduced-motion: reduce) {
-  .drawer {
-    transition: opacity 160ms ease;
-  }
-  .drawerHidden {
-    transform: none;
-    opacity: 0;
-  }
 }
 
 /* ── Floating corner chrome ──────────────────────────────────────────────
@@ -325,36 +301,17 @@
 }
 
 /* ── Floating input layer ────────────────────────────────────────────── */
+/* Absolutely positioned within the vaul drawer content (fixed would silently
+   re-anchor to the transformed drawer anyway), so it rides the drawer's drag
+   and enter/exit for free. The keyboard offset comes in via inline `bottom`. */
 .inputWrap {
-  position: fixed;
+  position: absolute;
   left: 0;
   right: 0;
   z-index: 82;
   padding-left: 0.75rem;
   padding-right: 0.75rem;
   pointer-events: none; /* only the field + menu capture taps */
-  /* Same duration/curve as the drawer: they now enter together and should read
-     as one motion. */
-  transition:
-    transform 300ms cubic-bezier(0.16, 1, 0.3, 1),
-    opacity 200ms ease;
-  will-change: transform;
-}
-.inputHidden {
-  transform: translateY(16px);
-  opacity: 0;
-}
-.inputShown {
-  transform: translateY(0);
-  opacity: 1;
-}
-@media (prefers-reduced-motion: reduce) {
-  .inputWrap {
-    transition: opacity 160ms ease;
-  }
-  .inputHidden {
-    transform: none;
-  }
 }
 
 /* New chat takes the composer's slot on the chats screen — same fixed layer, so
