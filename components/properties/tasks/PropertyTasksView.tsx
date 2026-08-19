@@ -25,13 +25,19 @@ import { useIsMobile } from '@/lib/useIsMobile';
 import { DESKTOP_TASK_PANEL_SLOT } from '@/lib/detailPanelGeometry';
 import { useExclusiveDetailPanelHost } from '@/lib/reservationViewerContext';
 import {
-  TaskFilterBar,
   type SortKey,
   type SortDir,
   type FilterOption,
   ORIGIN_MANUAL,
   ORIGIN_AUTOMATED,
 } from '@/components/tasks/TaskFilterBar';
+import {
+  FilterPicker,
+  SortPicker,
+  SORT_KEY_LABELS,
+} from '@/components/tasks/TaskPickers';
+import { CompactSearch } from '@/components/ui/compact-search';
+import { Filter as FilterIcon } from 'lucide-react';
 import { taskPath } from '@/src/lib/links';
 import { fetchJson, qk } from '@/lib/queries';
 import { useQuery } from '@tanstack/react-query';
@@ -500,28 +506,9 @@ function PropertyTasksViewContent({
     [sortedItems, sortKey, sortDir]
   );
 
-  const anyFilterActive = useMemo(
-    () =>
-      !!search ||
-      statusSelected.size > 0 ||
-      assigneeSelected.size > 0 ||
-      departmentSelected.size > 0 ||
-      binSelected.size > 0 ||
-      // Only count origin as active when it actually narrows results.
-      // Empty set or both values selected = pass-through, so no chip
-      // highlight and no "clear" required.
-      originSelected.size === 1 ||
-      prioritySelected.size > 0,
-    [
-      search,
-      statusSelected,
-      assigneeSelected,
-      departmentSelected,
-      binSelected,
-      originSelected,
-      prioritySelected,
-    ]
-  );
+  // Standard filter/sort pickers behind the funnel + sort pill.
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [sortOpen, setSortOpen] = useState(false);
 
   const clearAll = useCallback(() => {
     setSearch('');
@@ -615,41 +602,91 @@ function PropertyTasksViewContent({
       <div
         className={`${!isMobile && detailOpen ? 'w-2/3' : 'w-full'} flex flex-col min-w-0 transition-all`}
       >
-        {/* Header + filters */}
+        {/* Header controls — the standard row: search + filter funnel (the
+            drill-in picker) + right-anchored sort pill + New task. Same
+            pattern as the Tasks / My Assignments headers, both breakpoints. */}
         <div className="flex-shrink-0 border-b border-neutral-200/60 dark:border-[rgba(255,255,255,0.07)]">
-          <TaskFilterBar
-            search={search}
-            onSearchChange={setSearch}
-            statusOptions={statusOptions}
-            statusSelected={statusSelected}
-            onStatusChange={setStatusSelected}
-            assigneeOptions={assigneeOptions}
-            assigneeSelected={assigneeSelected}
-            onAssigneeChange={setAssigneeSelected}
-            departmentOptions={departmentOptions}
-            departmentSelected={departmentSelected}
-            onDepartmentChange={setDepartmentSelected}
-            binOptions={binOptions}
-            binSelected={binSelected}
-            onBinChange={setBinSelected}
-            originOptions={originOptions}
-            originSelected={originSelected}
-            onOriginChange={setOriginSelected}
-            priorityOptions={priorityOptions}
-            prioritySelected={prioritySelected}
-            onPriorityChange={setPrioritySelected}
-            sortKey={sortKey}
-            sortDir={sortDir}
-            onSortChange={(k, d) => {
-              setSortKey(k);
-              setSortDir(d);
-            }}
-            onClearAll={clearAll}
-            anyFilterActive={anyFilterActive}
-            onNewTask={handleNewTask}
-            totalCount={allItems.length}
-            filteredCount={filteredItems.length}
-          />
+          <div
+            className={`flex items-center gap-2 flex-nowrap min-w-0 ${
+              isMobile ? 'px-4 pt-2 pb-3' : 'px-8 py-3'
+            }`}
+          >
+            <CompactSearch value={search} onChange={setSearch} placeholder="Search tasks…" />
+
+            <FilterPicker
+              open={filterOpen}
+              onOpenChange={setFilterOpen}
+              renderTrigger={(activeCount) => (
+                <button
+                  type="button"
+                  title={filterOpen ? 'Hide filters' : 'Show filters'}
+                  aria-pressed={filterOpen}
+                  className={`relative flex-shrink-0 p-1.5 rounded transition-colors ${
+                    filterOpen || activeCount > 0
+                      ? 'bg-[var(--accent-bg-soft)] dark:bg-[var(--accent-bg-soft-dark)] text-[var(--accent-3)] dark:text-[var(--accent-1)]'
+                      : 'text-[#9a9892] dark:text-[#66645f] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-[#1a1a18] dark:hover:text-[#e8e7e3]'
+                  }`}
+                >
+                  <FilterIcon className="w-4 h-4" />
+                  {activeCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center min-w-[15px] h-[15px] rounded-full bg-[var(--accent-3)] dark:bg-[var(--accent-2)] text-white dark:text-[#1a1a1a] text-[9px] font-semibold tabular-nums px-1">
+                      {activeCount}
+                    </span>
+                  )}
+                </button>
+              )}
+              statusOptions={statusOptions}
+              statusSelected={statusSelected}
+              onStatusChange={setStatusSelected}
+              assigneeOptions={assigneeOptions}
+              assigneeSelected={assigneeSelected}
+              onAssigneeChange={setAssigneeSelected}
+              departmentOptions={departmentOptions}
+              departmentSelected={departmentSelected}
+              onDepartmentChange={setDepartmentSelected}
+              binOptions={binOptions}
+              binSelected={binSelected}
+              onBinChange={setBinSelected}
+              originOptions={originOptions}
+              originSelected={originSelected}
+              onOriginChange={setOriginSelected}
+              priorityOptions={priorityOptions}
+              prioritySelected={prioritySelected}
+              onPriorityChange={setPrioritySelected}
+              onClearAll={clearAll}
+            />
+
+            <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+              <SortPicker
+                open={sortOpen}
+                onOpenChange={setSortOpen}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                onChange={(k, d) => {
+                  setSortKey(k);
+                  setSortDir(d);
+                }}
+                trigger={
+                  <button className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium border bg-transparent text-neutral-600 dark:text-[#a09e9a] border-neutral-200 dark:border-[rgba(255,255,255,0.08)] hover:bg-[rgba(30,25,20,0.04)] dark:hover:bg-[rgba(255,255,255,0.04)] hover:text-neutral-800 dark:hover:text-[#f0efed] transition-colors">
+                    <span className="text-neutral-400 dark:text-[#66645f]">Sort:</span>
+                    <span className="whitespace-nowrap">{SORT_KEY_LABELS[sortKey]}</span>
+                    <span className="text-neutral-400 dark:text-[#66645f]">
+                      {sortDir === 'asc' ? '↑' : '↓'}
+                    </span>
+                  </button>
+                }
+              />
+              <button
+                onClick={() => handleNewTask()}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium bg-[var(--accent-3)] text-white hover:bg-[var(--accent-4)] dark:bg-[var(--accent-2)] dark:hover:bg-[var(--accent-1)] dark:text-[#1a1a1a] transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                <span className={isMobile ? 'sr-only' : ''}>New task</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* List */}

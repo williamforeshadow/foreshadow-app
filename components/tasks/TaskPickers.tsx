@@ -94,12 +94,23 @@ export interface FilterPickerProps {
   onScheduledDateRangeChange?: (next: DateRange) => void;
 }
 
+/** A from/to date-range axis (its own drill-in view with two date fields). */
+export interface RangeAxisSpec {
+  id: string;
+  label: string;
+  range: DateRange;
+  onChange: (next: DateRange) => void;
+}
+
 export interface DrillDownFilterPickerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   renderTrigger: (activeCount: number) => React.ReactElement;
   onClearAll: () => void;
   axes: FilterAxisSpec[];
+  /** Multiple named range axes (e.g. Messages' Check-in + Check-out). */
+  dateRanges?: RangeAxisSpec[];
+  // Single-range sugar, used by the task-list adapter.
   dateRange?: DateRange;
   onDateRangeChange?: (next: DateRange) => void;
   dateRangeLabel?: string;
@@ -111,6 +122,7 @@ export function DrillDownFilterPicker({
   renderTrigger,
   onClearAll,
   axes,
+  dateRanges,
   dateRange,
   onDateRangeChange,
   dateRangeLabel = 'Scheduled date',
@@ -124,24 +136,29 @@ export function DrillDownFilterPicker({
     if (!next) setView('root');
   };
 
+  // Named range axes; the single dateRange props fold in as one more entry.
+  const ranges: RangeAxisSpec[] = [
+    ...(dateRanges ?? []),
+    ...(dateRange && onDateRangeChange
+      ? [{ id: '__dateRange__', label: dateRangeLabel, range: dateRange, onChange: onDateRangeChange }]
+      : []),
+  ];
+
   const activeCount =
     axes.reduce(
       (n, a) => n + (a.exclusivePair ? (a.selected.size === 1 ? 1 : 0) : a.selected.size),
       0
-    ) + (dateRange && (dateRange.from || dateRange.to) ? 1 : 0);
+    ) + ranges.filter((r) => r.range.from || r.range.to).length;
 
-  const hasDateRange = !!dateRange && !!onDateRangeChange;
-  const activeAxis =
-    view !== 'root' && view !== 'dateRange' ? axes.find((a) => a.id === view) : undefined;
+  const activeAxis = view !== 'root' ? axes.find((a) => a.id === view) : undefined;
+  const activeRange = view !== 'root' ? ranges.find((r) => `range:${r.id}` === view) : undefined;
 
   const title =
     view === 'root'
       ? activeCount > 0
         ? `Filters · ${activeCount}`
         : 'Filters'
-      : view === 'dateRange'
-        ? dateRangeLabel
-        : activeAxis?.label ?? 'Filters';
+      : activeRange?.label ?? activeAxis?.label ?? 'Filters';
 
   const axisSummary = (axis: FilterAxisSpec): string => {
     if (axis.exclusivePair) {
@@ -171,13 +188,14 @@ export function DrillDownFilterPicker({
               onOpen={() => setView(axis.id)}
             />
           ))}
-          {hasDateRange && (
+          {ranges.map((r) => (
             <AxisRow
-              label={dateRangeLabel}
-              summary={formatRangeSummary(dateRange!)}
-              onOpen={() => setView('dateRange')}
+              key={r.id}
+              label={r.label}
+              summary={formatRangeSummary(r.range)}
+              onOpen={() => setView(`range:${r.id}`)}
             />
-          )}
+          ))}
           {activeCount > 0 && (
             <>
               <div className="my-1.5 h-px" style={{ background: 'var(--task-line)' }} />
@@ -193,10 +211,10 @@ export function DrillDownFilterPicker({
             </>
           )}
         </div>
-      ) : view === 'dateRange' ? (
+      ) : activeRange ? (
         <div className="pb-1">
           <BackRow onBack={() => setView('root')} />
-          <DateRangeFields range={dateRange!} onChange={onDateRangeChange!} />
+          <DateRangeFields range={activeRange.range} onChange={activeRange.onChange} />
         </div>
       ) : activeAxis ? (
         <AxisOptionList key={activeAxis.id} axis={activeAxis} onBack={() => setView('root')} />

@@ -1,17 +1,10 @@
 'use client';
 
-import {
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, ArrowDown, ArrowUp, Filter as FilterIcon, X } from 'lucide-react';
 import { useArmKeyboardOverlay } from '@/lib/useEditableKeyboardOverlay';
-import { FilterSelect, type FilterSelectOption } from '@/components/ui/FilterSelect';
-import { FilterDateRange } from '@/components/ui/FilterDateRange';
+import { type FilterSelectOption } from '@/components/ui/FilterSelect';
+import { DrillDownFilterPicker } from '@/components/tasks/TaskPickers';
 import { canonicalChannelLabel } from '@/lib/bookingChannel';
 import { useMessages } from '@/components/messages/MessagesProvider';
 
@@ -42,9 +35,10 @@ const iconBtnActive =
  *
  * Search collapses to just its icon; toggling it reveals ConversationSearchField
  * (a separate row below the header). Closing the search clears the query so no
- * invisible filter lingers. The filter funnel pops a DETACHED floating panel
- * (portaled, wider than the sidebar) with the filter pills in a horizontal row;
- * it stays open until the funnel is toggled or Escape.
+ * invisible filter lingers. The filter funnel opens the standard drill-in
+ * picker — anchored popover on desktop, bottom drawer on mobile — with the
+ * conversation axes (status / direction / property / channel) plus the
+ * check-in and check-out date ranges.
  */
 export function ConversationHeaderActions() {
   const {
@@ -58,43 +52,9 @@ export function ConversationHeaderActions() {
     filters,
     setFilter,
     clearFilters,
-    activeFilterCount,
   } = useMessages();
 
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState({ left: 0, top: 0 });
-  const btnRef = useRef<HTMLButtonElement | null>(null);
-  const panelRef = useRef<HTMLDivElement | null>(null);
-
-  useLayoutEffect(() => {
-    if (!open) return;
-    const update = () => {
-      const el = btnRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const gutter = 8;
-      const w = panelRef.current?.offsetWidth ?? 560;
-      const maxLeft = window.innerWidth - w - gutter;
-      const left = Math.min(Math.max(gutter, rect.left), Math.max(gutter, maxLeft));
-      setPos({ left, top: rect.bottom + 6 });
-    };
-    update();
-    window.addEventListener('resize', update);
-    window.addEventListener('scroll', update, true);
-    return () => {
-      window.removeEventListener('resize', update);
-      window.removeEventListener('scroll', update, true);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open]);
 
   const propertyOptions = useMemo<FilterSelectOption[]>(() => {
     const names = new Set<string>();
@@ -108,7 +68,6 @@ export function ConversationHeaderActions() {
     return [...keys].sort().map((k) => ({ value: k, label: canonicalChannelLabel(k) }));
   }, [conversations]);
 
-  const filterActive = open || activeFilterCount > 0;
   const searchActive = searchOpen || query.trim().length > 0;
 
   const toggleSearch = () => {
@@ -147,96 +106,71 @@ export function ConversationHeaderActions() {
         )}
       </button>
 
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-pressed={open}
-        title={open ? 'Hide filters' : 'Show filters'}
-        className={`${iconBtn} relative ${filterActive ? iconBtnActive : iconBtnIdle}`}
-      >
-        <FilterIcon className="h-4 w-4" />
-        {activeFilterCount > 0 ? (
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--accent-3)] px-1 text-[10px] font-semibold text-white">
-            {activeFilterCount}
-          </span>
-        ) : null}
-      </button>
-
-      {open && typeof document !== 'undefined'
-        ? createPortal(
-            <div
-              ref={panelRef}
-              style={{
-                position: 'fixed',
-                left: pos.left,
-                top: pos.top,
-                zIndex: 50,
-                background: 'var(--task-surface-1)',
-                borderColor: 'var(--task-line)',
-              }}
-              className="task-detail w-[min(280px,calc(100vw-16px))] rounded-xl border p-1.5 shadow-xl"
-            >
-              <div className="flex flex-col">
-                <FilterSelect
-                  block
-                  label="Status"
-                  options={STATUS_OPTIONS}
-                  selected={filters.status}
-                  onChange={(s) => setFilter('status', s)}
-                />
-                <FilterSelect
-                  block
-                  label="Direction"
-                  options={DIRECTION_OPTIONS}
-                  selected={filters.direction}
-                  onChange={(s) => setFilter('direction', s)}
-                />
-                <FilterSelect
-                  block
-                  label="Property"
-                  options={propertyOptions}
-                  selected={filters.property}
-                  onChange={(s) => setFilter('property', s)}
-                  searchable
-                />
-                <FilterSelect
-                  block
-                  label="Channel"
-                  options={channelOptions}
-                  selected={filters.channel}
-                  onChange={(s) => setFilter('channel', s)}
-                />
-                <FilterDateRange
-                  block
-                  label="Check-in"
-                  range={filters.checkIn}
-                  onChange={(r) => setFilter('checkIn', r)}
-                />
-                <FilterDateRange
-                  block
-                  label="Check-out"
-                  range={filters.checkOut}
-                  onChange={(r) => setFilter('checkOut', r)}
-                />
-                {activeFilterCount > 0 ? (
-                  <>
-                    <div className="my-1 h-px" style={{ background: 'var(--task-line)' }} />
-                    <button
-                      type="button"
-                      onClick={clearFilters}
-                      className="rounded-lg px-2.5 py-2 text-left text-[13px] font-medium transition-colors hover:bg-[var(--task-surface-2)]"
-                      style={{ color: 'var(--task-ink-3)' }}
-                    >
-                      Clear filters ({activeFilterCount})
-                    </button>
-                  </>
-                ) : null}
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
+      <DrillDownFilterPicker
+        open={open}
+        onOpenChange={setOpen}
+        onClearAll={clearFilters}
+        renderTrigger={(activeCount) => (
+          <button
+            type="button"
+            aria-pressed={open}
+            title={open ? 'Hide filters' : 'Show filters'}
+            className={`${iconBtn} relative ${open || activeCount > 0 ? iconBtnActive : iconBtnIdle}`}
+          >
+            <FilterIcon className="h-4 w-4" />
+            {activeCount > 0 ? (
+              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--accent-3)] px-1 text-[10px] font-semibold text-white">
+                {activeCount}
+              </span>
+            ) : null}
+          </button>
+        )}
+        axes={[
+          {
+            id: 'status',
+            label: 'Status',
+            options: STATUS_OPTIONS,
+            selected: filters.status,
+            onChange: (s) => setFilter('status', s),
+          },
+          {
+            id: 'direction',
+            label: 'Direction',
+            options: DIRECTION_OPTIONS,
+            selected: filters.direction,
+            onChange: (s) => setFilter('direction', s),
+          },
+          {
+            id: 'property',
+            label: 'Property',
+            options: propertyOptions,
+            selected: filters.property,
+            onChange: (s) => setFilter('property', s),
+            searchable: true,
+          },
+          {
+            id: 'channel',
+            label: 'Channel',
+            options: channelOptions,
+            selected: filters.channel,
+            onChange: (s) => setFilter('channel', s),
+          },
+        ]}
+        dateRanges={[
+          {
+            id: 'checkIn',
+            label: 'Check-in',
+            range: filters.checkIn,
+            onChange: (r) => setFilter('checkIn', r),
+          },
+          {
+            id: 'checkOut',
+            label: 'Check-out',
+            range: filters.checkOut,
+            onChange: (r) => setFilter('checkOut', r),
+          },
+        ]}
+      />
     </div>
   );
 }

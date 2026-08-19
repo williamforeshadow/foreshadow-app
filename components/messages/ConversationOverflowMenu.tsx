@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   MoreVertical,
   CheckCircle2,
@@ -8,14 +8,18 @@ import {
   Mail,
   GraduationCap,
 } from 'lucide-react';
+import { AdaptivePicker } from '@/components/tasks/detail/primitives/AdaptivePicker';
+import { TaskOptionRow } from '@/components/tasks/detail/primitives/TaskSheet';
 import { ConciergeToggleIcon } from '@/components/messages/ConciergeToggleIcon';
 
 /**
- * Mobile-only overflow (•••) menu for a conversation, rendered in the
- * MobileRouteShell top bar next to the "details" button. Holds the status
- * actions that live in the thread header on desktop (complete/reopen +
- * mark-unread) plus the "Turn into training" entry (which on desktop is the
- * grad-cap in the thread header). Selecting an item closes the menu.
+ * Overflow (•••) menu for a conversation, rendered in the mobile top bar next
+ * to the "details" button. Holds the status actions that live in the thread
+ * header on desktop (complete/reopen + mark-unread) plus the "Turn into
+ * training" entry (which on desktop is the grad-cap in the thread header).
+ *
+ * Standard picker surface: bottom drawer on mobile, anchored popover if it
+ * ever renders on desktop. Selecting an item applies and closes.
  *
  * "Turn into training" starts selection mode inside ConversationThread via a
  * signal the parent bumps — the confirm/cancel controls then appear in-thread.
@@ -41,101 +45,80 @@ export function ConversationOverflowMenu({
   onTurnIntoTraining: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
-
-  // Close on Escape (the backdrop handles outside taps).
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open]);
 
   const run = (fn: () => void) => () => {
     setOpen(false);
     fn();
   };
 
-  return (
-    <div ref={wrapRef} className="relative shrink-0">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label="More actions"
-        className="flex h-10 w-10 items-center justify-center rounded-lg text-neutral-700 transition-colors hover:bg-[rgba(30,25,20,0.04)] dark:text-[#a09e9a] dark:hover:bg-[rgba(255,255,255,0.04)]"
-      >
-        <MoreVertical className="h-[22px] w-[22px]" strokeWidth={1.75} />
-      </button>
+  const iconWrap = 'shrink-0 text-muted-foreground';
 
-      {open ? (
-        <>
-          {/* Tap-away catcher */}
-          <div
-            className="fixed inset-0 z-[59]"
-            onClick={() => setOpen(false)}
-            aria-hidden
-          />
-          <div
-            role="menu"
-            className="absolute right-0 top-full z-[60] mt-1 min-w-[188px] overflow-hidden rounded-xl border border-[var(--surface-elevated-line)] bg-white py-1 shadow-xl dark:bg-card"
-          >
-            <MenuItem
-              icon={
-                isComplete ? (
-                  <RotateCcw className="h-4 w-4" />
-                ) : (
-                  <CheckCircle2 className="h-4 w-4" />
-                )
-              }
-              label={isComplete ? 'Reopen' : 'Mark complete'}
-              onClick={run(onToggleComplete)}
-            />
-            <MenuItem
-              icon={<Mail className="h-4 w-4" />}
-              label="Mark unread"
-              onClick={run(onMarkUnread)}
-            />
-            <MenuItem
-              icon={<ConciergeToggleIcon enabled={conciergeEnabled} />}
-              label={conciergeEnabled ? 'Turn off concierge' : 'Turn on concierge'}
-              onClick={run(onToggleConcierge)}
-            />
-            {canTrain ? (
-              <MenuItem
-                icon={<GraduationCap className="h-4 w-4" />}
-                label="Turn into training"
-                onClick={run(onTurnIntoTraining)}
-              />
-            ) : null}
-          </div>
-        </>
-      ) : null}
-    </div>
-  );
-}
-
-function MenuItem({
-  icon,
-  label,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
   return (
-    <button
-      type="button"
-      role="menuitem"
-      onClick={onClick}
-      className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-sm text-foreground transition-colors hover:bg-black/[0.04] active:bg-black/[0.06] dark:hover:bg-white/[0.05] dark:active:bg-white/[0.07]"
+    <AdaptivePicker
+      open={open}
+      onOpenChange={setOpen}
+      title="Conversation"
+      align="end"
+      trigger={
+        <button
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label="More actions"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-neutral-700 transition-colors hover:bg-[rgba(30,25,20,0.04)] dark:text-[#a09e9a] dark:hover:bg-[rgba(255,255,255,0.04)]"
+        >
+          <MoreVertical className="h-[22px] w-[22px]" strokeWidth={1.75} />
+        </button>
+      }
     >
-      <span className="shrink-0 text-muted-foreground">{icon}</span>
-      {label}
-    </button>
+      <div className="pb-1">
+        <TaskOptionRow
+          onSelect={run(onToggleComplete)}
+          leading={
+            <span className={iconWrap}>
+              {isComplete ? (
+                <RotateCcw className="h-4 w-4" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
+              )}
+            </span>
+          }
+        >
+          {isComplete ? 'Reopen' : 'Mark complete'}
+        </TaskOptionRow>
+        <TaskOptionRow
+          onSelect={run(onMarkUnread)}
+          leading={
+            <span className={iconWrap}>
+              <Mail className="h-4 w-4" />
+            </span>
+          }
+        >
+          Mark unread
+        </TaskOptionRow>
+        <TaskOptionRow
+          onSelect={run(onToggleConcierge)}
+          leading={
+            <span className={iconWrap}>
+              <ConciergeToggleIcon enabled={conciergeEnabled} />
+            </span>
+          }
+        >
+          {conciergeEnabled ? 'Turn off concierge' : 'Turn on concierge'}
+        </TaskOptionRow>
+        {canTrain ? (
+          <TaskOptionRow
+            onSelect={run(onTurnIntoTraining)}
+            leading={
+              <span className={iconWrap}>
+                <GraduationCap className="h-4 w-4" />
+              </span>
+            }
+          >
+            Turn into training
+          </TaskOptionRow>
+        ) : null}
+      </div>
+    </AdaptivePicker>
   );
 }

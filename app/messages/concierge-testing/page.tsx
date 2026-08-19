@@ -14,13 +14,8 @@ import MobileRouteShell from '@/components/mobile/MobileRouteShell';
 import { useIsMobile } from '@/lib/useIsMobile';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { AdaptivePicker } from '@/components/tasks/detail/primitives/AdaptivePicker';
+import { TaskOptionRow } from '@/components/tasks/detail/primitives/TaskSheet';
 import { ProposedTask, type ProposedTaskData } from '@/components/messages/ProposedTask';
 import { ProposedKnowledge, type ProposedKnowledgeData } from '@/components/messages/ProposedKnowledge';
 import { cn } from '@/lib/utils';
@@ -135,6 +130,13 @@ function TestConsole({
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // One open flag per composer pill — all four render through the standard
+  // AdaptivePicker (drawer on mobile, anchored popover on desktop).
+  const [propertyOpen, setPropertyOpen] = useState(false);
+  const [propertyQuery, setPropertyQuery] = useState('');
+  const [scenarioOpen, setScenarioOpen] = useState(false);
+  const [channelOpen, setChannelOpen] = useState(false);
+  const [nameOpen, setNameOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Monotonic id source for transcript items (stable React keys across turns;
   // the server reuses ids like "test-task-0" every turn, so we mint our own).
@@ -322,89 +324,150 @@ function TestConsole({
         {!started && (
           <>
         {/* Property — the required action; tinted with the signal accent until chosen. */}
-        <Select value={propertyId} onValueChange={changeProperty}>
-          <SelectTrigger
-            size="sm"
-            aria-label="Property"
-            disabled={loadingProperties}
-            className={cn(
-              TRIGGER_CLASS,
-              !ready &&
-                'text-[var(--accent-3)] hover:text-[var(--accent-3)] dark:text-[var(--accent-1)] dark:hover:text-[var(--accent-1)]',
-            )}
-          >
-            <Home className="size-3.5" />
-            <span className="max-w-[10rem] truncate">
-              {loadingProperties ? 'Loading…' : propertyName ?? 'Select property'}
-            </span>
-          </SelectTrigger>
-          <SelectContent align="start" side="bottom" sideOffset={6} avoidCollisions={false}>
-            {properties.map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <AdaptivePicker
+          open={propertyOpen}
+          onOpenChange={(v) => {
+            setPropertyOpen(v);
+            if (!v) setPropertyQuery('');
+          }}
+          title="Property"
+          disabled={loadingProperties}
+          trigger={
+            <button
+              type="button"
+              aria-label="Property"
+              className={cn(
+                TRIGGER_CLASS,
+                !ready &&
+                  'text-[var(--accent-3)] hover:text-[var(--accent-3)] dark:text-[var(--accent-1)] dark:hover:text-[var(--accent-1)]',
+              )}
+            >
+              <Home className="size-3.5" />
+              <span className="max-w-[10rem] truncate">
+                {loadingProperties ? 'Loading…' : propertyName ?? 'Select property'}
+              </span>
+            </button>
+          }
+        >
+          <div className="pb-1">
+            <input
+              type="text"
+              value={propertyQuery}
+              onChange={(e) => setPropertyQuery(e.target.value)}
+              placeholder="Search properties…"
+              className="mb-2 w-full rounded-lg border bg-transparent px-3 py-2 text-[14px] focus:outline-none"
+              style={{ borderColor: 'var(--task-line)', color: 'var(--task-ink-1)' }}
+            />
+            {properties
+              .filter(
+                (p) =>
+                  !propertyQuery.trim() ||
+                  p.name.toLowerCase().includes(propertyQuery.toLowerCase()),
+              )
+              .map((p) => (
+                <TaskOptionRow
+                  key={p.id}
+                  selected={p.id === propertyId}
+                  onSelect={() => {
+                    changeProperty(p.id);
+                    setPropertyOpen(false);
+                    setPropertyQuery('');
+                  }}
+                >
+                  {p.name}
+                </TaskOptionRow>
+              ))}
+          </div>
+        </AdaptivePicker>
 
         {/* Guest status (scenario) */}
-        <Select value={scenario} onValueChange={(v) => changeScenario(v as TestScenario)}>
-          <SelectTrigger size="sm" aria-label="Guest status" className={TRIGGER_CLASS}>
-            <CalendarClock className="size-3.5" />
-            <span>{scenarioShort}</span>
-          </SelectTrigger>
-          <SelectContent align="start">
+        <AdaptivePicker
+          open={scenarioOpen}
+          onOpenChange={setScenarioOpen}
+          title="Guest status"
+          trigger={
+            <button type="button" aria-label="Guest status" className={TRIGGER_CLASS}>
+              <CalendarClock className="size-3.5" />
+              <span>{scenarioShort}</span>
+            </button>
+          }
+        >
+          <div className="pb-1">
             {SCENARIO_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
+              <TaskOptionRow
+                key={o.value}
+                selected={o.value === scenario}
+                onSelect={() => {
+                  changeScenario(o.value);
+                  setScenarioOpen(false);
+                }}
+              >
                 {o.label}
-              </SelectItem>
+              </TaskOptionRow>
             ))}
-          </SelectContent>
-        </Select>
+          </div>
+        </AdaptivePicker>
 
         {/* Channel (which OTA the guest is messaging on) */}
-        <Select value={channel} onValueChange={(v) => changeChannel(v as TestChannel)}>
-          <SelectTrigger size="sm" aria-label="Guest channel" className={TRIGGER_CLASS}>
-            <Globe className="size-3.5" />
-            <span>{channelShort}</span>
-          </SelectTrigger>
-          <SelectContent align="start">
+        <AdaptivePicker
+          open={channelOpen}
+          onOpenChange={setChannelOpen}
+          title="Guest channel"
+          trigger={
+            <button type="button" aria-label="Guest channel" className={TRIGGER_CLASS}>
+              <Globe className="size-3.5" />
+              <span>{channelShort}</span>
+            </button>
+          }
+        >
+          <div className="pb-1">
             {CHANNEL_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
+              <TaskOptionRow
+                key={o.value}
+                selected={o.value === channel}
+                onSelect={() => {
+                  changeChannel(o.value);
+                  setChannelOpen(false);
+                }}
+              >
                 {o.label}
-              </SelectItem>
+              </TaskOptionRow>
             ))}
-          </SelectContent>
-        </Select>
+          </div>
+        </AdaptivePicker>
 
         {/* Guest identity (name) */}
-        <Popover>
-          <PopoverTrigger className={TRIGGER_CLASS} aria-label="Guest name">
-            <span
-              className="size-3 rounded-full bg-gradient-to-br from-[var(--accent-1)] to-[var(--accent-3)]"
-              aria-hidden
-            />
-            <span className="max-w-[8rem] truncate">{guestName.trim() || 'Guest'}</span>
-            <ChevronDown className="size-3.5 opacity-50" aria-hidden />
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-64">
-            <div className="space-y-2">
-              <Label htmlFor="test-guest" className="text-xs">
-                Guest name
-              </Label>
-              <Input
-                id="test-guest"
-                value={guestName}
-                onChange={(e) => setGuestName(e.target.value)}
-                placeholder="e.g. Jordan"
-                autoFocus
+        <AdaptivePicker
+          open={nameOpen}
+          onOpenChange={setNameOpen}
+          title="Guest name"
+          contentClassName="w-72"
+          trigger={
+            <button type="button" aria-label="Guest name" className={TRIGGER_CLASS}>
+              <span
+                className="size-3 rounded-full bg-gradient-to-br from-[var(--accent-1)] to-[var(--accent-3)]"
+                aria-hidden
               />
-              <p className="text-[11px] text-muted-foreground">
-                Optional — how the concierge addresses the guest. Doesn’t reset the conversation.
-              </p>
-            </div>
-          </PopoverContent>
-        </Popover>
+              <span className="max-w-[8rem] truncate">{guestName.trim() || 'Guest'}</span>
+              <ChevronDown className="size-3.5 opacity-50" aria-hidden />
+            </button>
+          }
+        >
+          <div className="space-y-2 px-1 pb-2">
+            <Label htmlFor="test-guest" className="text-xs">
+              Guest name
+            </Label>
+            <Input
+              id="test-guest"
+              value={guestName}
+              onChange={(e) => setGuestName(e.target.value)}
+              placeholder="e.g. Jordan"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Optional — how the concierge addresses the guest. Doesn’t reset the conversation.
+            </p>
+          </div>
+        </AdaptivePicker>
           </>
         )}
 
