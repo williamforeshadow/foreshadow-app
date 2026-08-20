@@ -5,6 +5,9 @@ import { useAuth } from '@/lib/authContext';
 import { AGENT_COMMANDS } from '@/src/lib/agentCommands';
 import type { TaskRow } from '@/src/agent/tools/findTasks';
 import type { SessionSummary } from '@/src/server/agent/sessions';
+import type { AgentProposedTaskCard } from '@/src/server/agent/proposedTaskCards';
+
+export type { AgentProposedTaskCard };
 
 // The agent conversation, lifted out of AiChatPanel so a second surface (the
 // mobile bottom-sheet chat) can drive the same wiring — /api/agent for free
@@ -32,6 +35,10 @@ export interface AgentMessage {
   // Structured task rows from any find_tasks call this turn. The tasks the
   // answer actually links to render as cards below the text.
   tasks?: TaskRow[];
+  // Durable task proposals registered this turn (propose_task). Each renders
+  // as a ProposedTask card with its own Create/Dismiss controls; deciding one
+  // goes through /api/proposed-tasks/[id], not the confirm endpoint.
+  proposals?: AgentProposedTaskCard[];
   // Files sent with a user message, echoed back into the bubble so the thread
   // shows what was attached where.
   attachments?: { id: string; name: string }[];
@@ -121,6 +128,12 @@ export interface UseAgentChat {
     pendingActionIds: string[],
     action: 'confirm' | 'cancel',
   ) => Promise<void>;
+  /**
+   * Re-fetch the given proposal cards after an accept/dismiss and patch them
+   * into whichever messages carry them. Accepted proposals become tombstones;
+   * dismissed ones disappear.
+   */
+  refreshProposals: (proposalIds: string[]) => Promise<void>;
   /** Files staged for the next message. */
   attachments: ComposerAttachment[];
   /** Stage picked files immediately; they upload in the background. */
@@ -148,6 +161,7 @@ function toAgentMessage(raw: HydratedMessageDto): AgentMessage {
     ...(pendingActionIds
       ? { pendingActionIds, confirmation: 'pending' as const }
       : {}),
+    ...(raw.proposed_tasks?.length ? { proposals: raw.proposed_tasks } : {}),
   };
 }
 
@@ -157,6 +171,7 @@ interface HydratedMessageDto {
   content: string;
   attachments?: { id: string; name: string }[];
   pending_action_ids?: string[];
+  proposed_tasks?: AgentProposedTaskCard[];
   variant?: 'success' | 'error';
 }
 
@@ -539,6 +554,11 @@ export function useAgentChat(): UseAgentChat {
               pendingActionIds: ids.length > 0 ? ids : undefined,
               confirmation: ids.length > 0 ? 'pending' : undefined,
               tasks: Array.isArray(data.tasks) ? data.tasks : undefined,
+              proposals:
+                Array.isArray(data.proposed_tasks) &&
+                data.proposed_tasks.length > 0
+                  ? data.proposed_tasks
+                  : undefined,
             },
           ]);
         }
@@ -559,6 +579,35 @@ export function useAgentChat(): UseAgentChat {
     },
     [user, isLoading, runCommand, attachments, sessionId, refreshSessions],
   );
+
+  const refreshProposals = useCallback(async (proposalIds: string[]) => {
+    const ids = proposalIds.filter(Boolean);
+    if (ids.length === 0) return;
+    try {
+      const res = await fetch(
+        `/api/proposed-tasks?ids=${encodeURIComponent(ids.join(','))}`,
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      const fresh: AgentProposedTaskCard[] = Array.isArray(data?.proposed_tasks)
+        ? data.proposed_tasks
+        : [];
+      const byId = new Map(fresh.map((c) => [c.id, c]));
+      const requested = new Set(ids);
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (!m.proposals?.some((p) => requested.has(p.id))) return m;
+          const next = m.proposals
+            .map((p) => byId.get(p.id) ?? p)
+            // A dismissed (or vanished) proposal renders nothing — drop it.
+            .filter((p) => byId.has(p.id) ? p.status !== 'dismissed' : true);
+          return { ...m, proposals: next.length > 0 ? next : undefined };
+        }),
+      );
+    } catch {
+      /* leave the stale card; the next hydration corrects it */
+    }
+  }, []);
 
   const handleConfirmAction = useCallback(
     async (
@@ -661,6 +710,7 @@ export function useAgentChat(): UseAgentChat {
     submitMessage,
     runCommand,
     handleConfirmAction,
+    refreshProposals,
     attachments,
     addAttachments,
     removeAttachment,

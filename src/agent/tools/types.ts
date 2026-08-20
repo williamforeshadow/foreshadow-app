@@ -73,6 +73,21 @@ export type ToolResult<T> =
  */
 export interface ToolContext {
   /**
+   * Today's date (YYYY-MM-DD) in the talking-to user's timezone, resolved by
+   * the caller from the browser/Slack tz. The dispatcher injects it into any
+   * tool flagged `injectReferenceDate` so date-relative filters ("overdue",
+   * "current", "upcoming") align with the user's local clock — the model
+   * never sees or passes this value. Absent on callers with no user clock;
+   * handlers then fall back to today UTC.
+   */
+  referenceDate?: string;
+  /**
+   * The agent_sessions row this run belongs to (web chat). propose_task
+   * stamps it onto proposal rows for audit; absent on surfaces without
+   * session-scoped proposals.
+   */
+  sessionId?: string;
+  /**
    * Database client for tool queries. On authenticated surfaces this is
    * RLS-GOVERNED (the web session client, or a minted user client for Slack) —
    * the database itself scopes every query to the acting user's org, so a
@@ -177,6 +192,19 @@ export function requireOrgId(
 export interface ToolDefinition<TInput, TOutput> {
   /** Stable identifier the LLM uses when invoking the tool. snake_case. */
   name: string;
+  /**
+   * Surfaces this tool is offered on. Omit for every surface. Used to split
+   * the task-creation path: web proposes durable cards (propose_task) while
+   * Slack keeps the preview/commit token flow (no card surface there).
+   */
+  surfaces?: ReadonlyArray<'web' | 'slack'>;
+  /**
+   * When true, the dispatcher overwrites `reference_date` on the tool's input
+   * with ToolContext.referenceDate before validation. The field stays in the
+   * zod inputSchema (it's how the value reaches the handler) but is omitted
+   * from jsonSchema — the model doesn't know it exists.
+   */
+  injectReferenceDate?: boolean;
   /** Plain-language description shown to the LLM. */
   description: string;
   /** Runtime validator. Tool inputs are validated before `handler` runs. */

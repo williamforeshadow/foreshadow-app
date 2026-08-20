@@ -29,8 +29,10 @@ export interface ProposedTaskData {
   /** AI-suggested schedule (canonical task formats), or null when unscheduled. */
   scheduled_date?: string | null; // 'YYYY-MM-DD'
   scheduled_time?: string | null; // 'HH:MM' (24h)
-  /** 'pending' (editable card) or 'accepted' (approved tombstone). */
-  status?: 'pending' | 'accepted';
+  /** 'pending' (editable card) or 'accepted' (approved tombstone). A
+   *  'dismissed' proposal renders nothing — callers usually filter these out,
+   *  but the type admits them so card loaders can pass rows through as-is. */
+  status?: 'pending' | 'accepted' | 'dismissed';
   /** Who approved it + when, for the accepted tombstone. */
   decided_by_name?: string | null;
   decided_at?: string | null;
@@ -188,6 +190,8 @@ export function ProposedTask({
       setBusy(null);
     }
   }, [proposal.id, onChanged, onDismiss]);
+
+  if (proposal.status === 'dismissed') return null;
 
   // Accepted → compact "approved by … " tombstone, kept in the thread.
   if (proposal.status === 'accepted') {

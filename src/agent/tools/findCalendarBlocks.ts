@@ -85,11 +85,9 @@ const inputSchema = z
       .describe(
         'When true, only blocks whose end_date is before reference_date. Mutually exclusive with current_only/upcoming and with overlapping.',
       ),
-    reference_date: dateString
-      .optional()
-      .describe(
-        "Today's date in the user's timezone (YYYY-MM-DD). Used by current_only/upcoming/past so 'today' matches the user's local clock instead of server UTC. Defaults to today UTC when omitted.",
-      ),
+    // Not model-visible (absent from jsonSchema): the dispatcher injects the
+    // user's local today via ToolContext.referenceDate (injectReferenceDate).
+    reference_date: dateString.optional(),
     source: SOURCE_ENUM
       .optional()
       .describe(
@@ -400,8 +398,9 @@ async function handler(
 
 export const findCalendarBlocks: ToolDefinition<Input, CalendarBlockRow[]> = {
   name: 'find_calendar_blocks',
+  injectReferenceDate: true,
   description:
-    "Find calendar BLOCKS — manual/maintenance days a property is marked unavailable WITHOUT a reservation (e.g. a maintenance hold or deep-clean close-down). These are NOT bookings: no guest, no revenue, and they fire no automations. CRITICAL boundary: guest bookings AND owner stays are reservations, not blocks — for 'is the owner staying' or any guest stay use find_reservations (with kind='owner_stay' for owner-reserved dates); this tool only returns the separate maintenance/manual blocks. Filter by property_id (one) or property_ids (several; resolve names with find_properties first). Use overlapping {from,to} for a date window, or the convenience flags current_only/upcoming/past with reference_date in the user's timezone. Both start_date and end_date are INCLUSIVE; each row includes a computed `days` (inclusive blocked-day count) and the resolved property_name. `source` is 'hostaway' (synced from the listing calendar) or 'manual' (created in Foreshadow). ORDERING: `sort` is 'most_recent' (latest start_date first) or 'earliest' (soonest first); defaults to 'most_recent' when past=true, else 'earliest'. Resolved order is in meta.sort.",
+    "Find calendar BLOCKS — manual/maintenance days a property is marked unavailable WITHOUT a reservation (e.g. a maintenance hold or deep-clean close-down). These are NOT bookings: no guest, no revenue, and they fire no automations. CRITICAL boundary: guest bookings AND owner stays are reservations, not blocks — for 'is the owner staying' or any guest stay use find_reservations (with kind='owner_stay' for owner-reserved dates); this tool only returns the separate maintenance/manual blocks. Filter by property_id (one) or property_ids (several; resolve names with find_properties first). Use overlapping {from,to} for a date window, or the convenience flags current_only/upcoming/past — they evaluate against today in the user's local timezone automatically. Both start_date and end_date are INCLUSIVE; each row includes a computed `days` (inclusive blocked-day count) and the resolved property_name. `source` is 'hostaway' (synced from the listing calendar) or 'manual' (created in Foreshadow). ORDERING: `sort` is 'most_recent' (latest start_date first) or 'earliest' (soonest first); defaults to 'most_recent' when past=true, else 'earliest'. Resolved order is in meta.sort.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -437,22 +436,17 @@ export const findCalendarBlocks: ToolDefinition<Input, CalendarBlockRow[]> = {
       current_only: {
         type: 'boolean',
         description:
-          'When true, only blocks covering reference_date (start_date <= ref <= end_date). Mutually exclusive with upcoming/past and with overlapping.',
+          "When true, only blocks covering today (the user's local date, resolved server-side). Mutually exclusive with upcoming/past and with overlapping.",
       },
       upcoming: {
         type: 'boolean',
         description:
-          'When true, only blocks whose start_date is after reference_date. Mutually exclusive with current_only/past and with overlapping.',
+          'When true, only blocks whose start_date is after today. Mutually exclusive with current_only/past and with overlapping.',
       },
       past: {
         type: 'boolean',
         description:
-          'When true, only blocks whose end_date is before reference_date. Mutually exclusive with current_only/upcoming and with overlapping.',
-      },
-      reference_date: {
-        type: 'string',
-        description:
-          "Today's date in the user's timezone, formatted YYYY-MM-DD. Used by current_only/upcoming/past so 'today' matches the user's local clock rather than server UTC. Defaults to today UTC.",
+          'When true, only blocks whose end_date is before today. Mutually exclusive with current_only/upcoming and with overlapping.',
       },
       source: {
         type: 'string',

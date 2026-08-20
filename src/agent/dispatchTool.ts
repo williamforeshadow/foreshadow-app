@@ -39,7 +39,18 @@ export async function dispatchTool(
   trace: ToolCallTrace[],
   ctx: ToolContext,
 ): Promise<ToolResultBlockParam> {
-  const parsed = tool.inputSchema.safeParse(use.input);
+  // Server-side date grounding: tools flagged injectReferenceDate get the
+  // user's local "today" stamped onto their input here, overriding anything
+  // the model sent (the field isn't in the model-visible schema, but a stale
+  // or hallucinated value must not win over the caller-resolved one). When
+  // the run has no user clock (ctx.referenceDate unset), handlers fall back
+  // to today UTC as before.
+  const input =
+    tool.injectReferenceDate && ctx.referenceDate
+      ? { ...(use.input as Record<string, unknown>), reference_date: ctx.referenceDate }
+      : use.input;
+
+  const parsed = tool.inputSchema.safeParse(input);
   if (!parsed.success) {
     const result: ToolResult<unknown> = {
       ok: false,

@@ -1,4 +1,8 @@
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import {
+  loadProposedTaskCards,
+  type AgentProposedTaskCard,
+} from './proposedTaskCards';
 
 // Web chat sessions — list, rename, archive, and rehydrate.
 //
@@ -34,6 +38,12 @@ export interface HydratedMessage {
   attachments?: { id: string; name: string }[];
   /** Present only when those actions are STILL pending — see loadSessionMessages. */
   pending_action_ids?: string[];
+  /**
+   * Task proposal cards registered by this message (propose_task). Unlike
+   * pending actions these persist across every lifecycle state — accepted and
+   * dismissed proposals rehydrate as tombstones, matching the concierge inbox.
+   */
+  proposed_tasks?: AgentProposedTaskCard[];
   variant?: 'success' | 'error';
 }
 
@@ -170,10 +180,23 @@ export async function loadSessionMessages(
   // One query for every action id mentioned anywhere in the transcript; the
   // survivors are the ones that still deserve buttons.
   const referencedIds = new Set<string>();
+  const referencedProposalIds = new Set<string>();
   for (const row of rows) {
     for (const id of readActionIds(row.metadata)) referencedIds.add(id);
+    for (const id of readProposedTaskIds(row.metadata)) {
+      referencedProposalIds.add(id);
+    }
   }
   const liveIds = await loadLivePendingActionIds(Array.from(referencedIds));
+
+  // Proposal cards for the whole transcript in one query. Dismissed rows
+  // (including superseded ones) are dropped — matching the concierge inbox,
+  // which renders pending cards and accepted tombstones only.
+  const proposalCards = new Map(
+    (await loadProposedTaskCards(supabase, Array.from(referencedProposalIds)))
+      .filter((c) => c.status !== 'dismissed')
+      .map((c) => [c.id, c]),
+  );
 
   const out: HydratedMessage[] = [];
   for (const row of rows) {
@@ -198,6 +221,13 @@ export async function loadSessionMessages(
     const stillPending = readActionIds(meta).filter((id) => liveIds.has(id));
     if (stillPending.length > 0 && row.role === 'assistant') {
       message.pending_action_ids = stillPending;
+    }
+
+    if (row.role === 'assistant') {
+      const proposals = readProposedTaskIds(meta)
+        .map((id) => proposalCards.get(id))
+        .filter((c): c is AgentProposedTaskCard => c !== undefined);
+      if (proposals.length > 0) message.proposed_tasks = proposals;
     }
 
     const variant = readVariant(meta);
@@ -263,6 +293,12 @@ async function loadLivePendingActionIds(ids: string[]): Promise<Set<string>> {
 
 function readActionIds(meta: Record<string, unknown> | null): string[] {
   const raw = meta?.pending_action_ids;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((v): v is string => typeof v === 'string' && v.length > 0);
+}
+
+function readProposedTaskIds(meta: Record<string, unknown> | null): string[] {
+  const raw = meta?.proposed_task_ids;
   if (!Array.isArray(raw)) return [];
   return raw.filter((v): v is string => typeof v === 'string' && v.length > 0);
 }

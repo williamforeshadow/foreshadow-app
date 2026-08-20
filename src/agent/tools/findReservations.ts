@@ -125,11 +125,9 @@ const inputSchema = z
       .describe(
         'When true, only stays whose check_out is before reference_date. Mutually exclusive with current_only/upcoming and with explicit date-range filters.',
       ),
-    reference_date: dateString
-      .optional()
-      .describe(
-        "Today's date in the user's timezone (YYYY-MM-DD). Used by current_only/upcoming/past so 'today' matches the user's local clock instead of server UTC. Defaults to today UTC when omitted.",
-      ),
+    // Not model-visible (absent from jsonSchema): the dispatcher injects the
+    // user's local today via ToolContext.referenceDate (injectReferenceDate).
+    reference_date: dateString.optional(),
     source: SOURCE_ENUM
       .optional()
       .describe(
@@ -564,8 +562,9 @@ async function handler(
 
 export const findReservations: ToolDefinition<Input, ReservationRow[]> = {
   name: 'find_reservations',
+  injectReferenceDate: true,
   description:
-    "Find guest reservations (stays) by property, guest name, Hostaway reservation id, or date range. Use convenience flags current_only/upcoming/past for relative-time questions ('who's there now', 'this week's arrivals'); pass reference_date in the user's local timezone so 'today' aligns with their clock. Property filtering: use property_id for one property; use property_ids for multiple (e.g. 'check-ins this week at these N properties') — always prefer the batched call + a date range over looping property_id one ID at a time. Resolve names with find_properties first. ORDERING: `sort` controls direction — 'most_recent' = latest stays first (by check_out), 'earliest' = oldest stays first (by check_in); it defaults to 'most_recent' when past=true and 'earliest' otherwise. The resolved order is returned in meta.sort. Returns slim rows with computed nights and is_back_to_back fields. Each row has a `kind`: 'guest_booking' (a paying guest) or 'owner_stay' (dates the owner reserved for themselves, no guest revenue; normalized from whichever PMS the property syncs from) — pass `kind` to filter to one, or omit to get both. There is no status column — cancellations are deletions, so you cannot ask for cancelled stays. GUEST NAME LOOKUPS DEGRADE INSTEAD OF FAILING, and meta.match_mode says how: 'exact' means real substring matches; 'fuzzy' means nothing matched exactly and these are the closest spellings — good candidates, but confirm before acting. When a fuzzy retry finds the guest yet your OTHER filters exclude every one of their stays, the rows come back empty with an explanatory meta.note; read it, because 'this guest has no stays in that date range' and 'there is no such guest' are different answers and only one of them means you should stop looking. Never report a guest as not found without checking meta.note first.",
+    "Find guest reservations (stays) by property, guest name, Hostaway reservation id, or date range. Use convenience flags current_only/upcoming/past for relative-time questions ('who's there now', 'this week's arrivals'); they evaluate against today in the user's local timezone automatically. Property filtering: use property_id for one property; use property_ids for multiple (e.g. 'check-ins this week at these N properties') — always prefer the batched call + a date range over looping property_id one ID at a time. Resolve names with find_properties first. ORDERING: `sort` controls direction — 'most_recent' = latest stays first (by check_out), 'earliest' = oldest stays first (by check_in); it defaults to 'most_recent' when past=true and 'earliest' otherwise. The resolved order is returned in meta.sort. Returns slim rows with computed nights and is_back_to_back fields. Each row has a `kind`: 'guest_booking' (a paying guest) or 'owner_stay' (dates the owner reserved for themselves, no guest revenue; normalized from whichever PMS the property syncs from) — pass `kind` to filter to one, or omit to get both. There is no status column — cancellations are deletions, so you cannot ask for cancelled stays. GUEST NAME LOOKUPS DEGRADE INSTEAD OF FAILING, and meta.match_mode says how: 'exact' means real substring matches; 'fuzzy' means nothing matched exactly and these are the closest spellings — good candidates, but confirm before acting. When a fuzzy retry finds the guest yet your OTHER filters exclude every one of their stays, the rows come back empty with an explanatory meta.note; read it, because 'this guest has no stays in that date range' and 'there is no such guest' are different answers and only one of them means you should stop looking. Never report a guest as not found without checking meta.note first.",
   inputSchema,
   jsonSchema: {
     type: 'object' as const,
@@ -630,22 +629,17 @@ export const findReservations: ToolDefinition<Input, ReservationRow[]> = {
       current_only: {
         type: 'boolean',
         description:
-          'When true, only stays where reference_date falls within [check_in, check_out]. Mutually exclusive with upcoming/past and with explicit date-range filters.',
+          "When true, only stays that include today (the user's local date, resolved server-side). Mutually exclusive with upcoming/past and with explicit date-range filters.",
       },
       upcoming: {
         type: 'boolean',
         description:
-          'When true, only stays whose check_in is after reference_date. Mutually exclusive with current_only/past and with explicit date-range filters.',
+          'When true, only stays whose check_in is after today. Mutually exclusive with current_only/past and with explicit date-range filters.',
       },
       past: {
         type: 'boolean',
         description:
-          'When true, only stays whose check_out is before reference_date. Mutually exclusive with current_only/upcoming and with explicit date-range filters.',
-      },
-      reference_date: {
-        type: 'string',
-        description:
-          "Today's date in the user's timezone, formatted YYYY-MM-DD. Used by current_only/upcoming/past so 'today' matches the user's local clock rather than server UTC. Defaults to today UTC.",
+          'When true, only stays whose check_out is before today. Mutually exclusive with current_only/upcoming and with explicit date-range filters.',
       },
       source: {
         type: 'string',

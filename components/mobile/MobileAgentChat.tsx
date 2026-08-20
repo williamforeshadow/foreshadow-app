@@ -30,7 +30,10 @@ import {
   referencedTasks,
   toRelativeHref,
   useAgentChat,
+  type AgentProposedTaskCard,
 } from '@/components/ai-chat/useAgentChat';
+import { ProposedTask } from '@/components/messages/ProposedTask';
+import { ProposedTaskEditorOverlay } from '@/components/messages/ProposedTaskEditorOverlay';
 import { TaskAttachment } from '@/components/ai-chat/TaskAttachment';
 import { MobileSessionList } from './MobileSessionList';
 import {
@@ -140,11 +143,17 @@ export function MobileAgentChat() {
     submitMessage,
     runCommand,
     handleConfirmAction,
+    refreshProposals,
     attachments,
     addAttachments,
     removeAttachment,
     isUploading,
   } = useAgentChat();
+
+  // Agent task proposal being edited before acceptance (standard create-task
+  // form, posting to the proposal-accept endpoint). Mirrors AiChatPanel.
+  const [editorProposal, setEditorProposal] =
+    useState<AgentProposedTaskCard | null>(null);
 
   // The chats screen is a mode, not a popover: it takes the whole drawer, and
   // `searching` swaps its top strip for a filter field.
@@ -314,6 +323,16 @@ export function MobileAgentChat() {
       : `calc(85dvh - ${bottomReserve}px - env(safe-area-inset-bottom))`;
 
   return (
+    <>
+      {editorProposal && (
+        <ProposedTaskEditorOverlay
+          proposal={editorProposal}
+          propertyId={editorProposal.property_id}
+          propertyName={editorProposal.property_name}
+          onClose={() => setEditorProposal(null)}
+          onCreated={() => void refreshProposals([editorProposal.id])}
+        />
+      )}
     <Drawer.Root
       open={isOpen}
       onOpenChange={(v) => {
@@ -486,6 +505,20 @@ export function MobileAgentChat() {
                           }
                           return <TaskAttachment cards={cards} onOpen={onOpen} />;
                         })()}
+                      {msg.proposals && msg.proposals.length > 0 && (
+                        <div className="flex flex-col">
+                          {msg.proposals.map((p) => (
+                            <ProposedTask
+                              key={p.id}
+                              proposal={p}
+                              propertyName={p.property_name}
+                              align="start"
+                              onOpenEditor={() => setEditorProposal(p)}
+                              onChanged={() => void refreshProposals([p.id])}
+                            />
+                          ))}
+                        </div>
+                      )}
                       {msg.pendingActionIds &&
                         msg.pendingActionIds.length > 0 &&
                         (msg.confirmation === 'pending' ||
@@ -660,5 +693,6 @@ export function MobileAgentChat() {
         </Drawer.Content>
       </Drawer.Portal>
     </Drawer.Root>
+    </>
   );
 }

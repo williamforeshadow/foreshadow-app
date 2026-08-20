@@ -217,6 +217,9 @@ export const previewTasksBatch: ToolDefinition<
   PreviewTasksBatchResultData
 > = {
   name: 'preview_tasks_batch',
+  // Web task creation moved to propose_task (one call per task, each its own
+  // card); the token/Confirm flow remains the Slack path.
+  surfaces: ['slack'],
   description:
     "PREVIEW the creation of multiple tasks in one shot. ALWAYS call this first when the user asks to create more than one task at a time, OR when the user asks to create a sub-bin and add tasks to it. Title is the only required field on each task — call this as soon as you can write them, and let the defaults cover whatever the user did not mention rather than asking. Validates every task input, validates the shared bin destination (existing sub-bin via bin_id, brand-new sub-bin via new_sub_bin, default Task Bin via is_binned=true, or free-floating when omitted), resolves every FK, and returns a single plan + single confirmation_token. After calling: present the plan to the user (mention the destination AND the per-task summary); the Confirm/Cancel pair shown below your message is how they agree, so do not also ask in prose. Tokens are single-use and expire in 5 minutes. preview_tasks_batch never writes; safe to call repeatedly. For SINGLE-task creation, prefer preview_task — it's slightly cheaper and gives a richer per-task plan.",
   inputSchema,

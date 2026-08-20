@@ -36,7 +36,10 @@ import {
   referencedTasks,
   toRelativeHref,
   useAgentChat,
+  type AgentProposedTaskCard,
 } from './useAgentChat';
+import { ProposedTask } from '@/components/messages/ProposedTask';
+import { ProposedTaskEditorOverlay } from '@/components/messages/ProposedTaskEditorOverlay';
 import { ComposerAttachments, MessageAttachments } from './ComposerAttachments';
 import { SessionList } from './SessionList';
 import styles from './AiChatPanel.module.css';
@@ -120,11 +123,18 @@ export function AiChatPanel() {
     submitMessage,
     runCommand,
     handleConfirmAction,
+    refreshProposals,
     attachments,
     addAttachments,
     removeAttachment,
     isUploading,
   } = useAgentChat();
+
+  // Agent task proposal being edited before acceptance. The overlay mounts the
+  // standard CreateTaskPanel (same as the concierge inbox) and posts the edited
+  // fields to the proposal-accept endpoint.
+  const [editorProposal, setEditorProposal] =
+    useState<AgentProposedTaskCard | null>(null);
 
   // Browsing chats is a mode, not a popover, and `searching` swaps the header
   // title for a filter field. Mirrors the mobile sheet so the two read alike.
@@ -295,6 +305,16 @@ export function AiChatPanel() {
   const isEmpty = messages.length === 0 && !isLoading && !isHydrating;
 
   return (
+    <>
+      {editorProposal && (
+        <ProposedTaskEditorOverlay
+          proposal={editorProposal}
+          propertyId={editorProposal.property_id}
+          propertyName={editorProposal.property_name}
+          onClose={() => setEditorProposal(null)}
+          onCreated={() => void refreshProposals([editorProposal.id])}
+        />
+      )}
     <AnimatePresence>
       {isOpen && (
         <motion.div
@@ -501,6 +521,22 @@ export function AiChatPanel() {
                                   />
                                 );
                               })()}
+                            {msg.proposals && msg.proposals.length > 0 && (
+                              <div className="flex flex-col">
+                                {msg.proposals.map((p) => (
+                                  <ProposedTask
+                                    key={p.id}
+                                    proposal={p}
+                                    propertyName={p.property_name}
+                                    align="start"
+                                    onOpenEditor={() => setEditorProposal(p)}
+                                    onChanged={() =>
+                                      void refreshProposals([p.id])
+                                    }
+                                  />
+                                ))}
+                              </div>
+                            )}
                             {msg.pendingActionIds &&
                               msg.pendingActionIds.length > 0 &&
                               (msg.confirmation === 'pending' ||
@@ -646,5 +682,6 @@ export function AiChatPanel() {
         </motion.div>
       )}
     </AnimatePresence>
+    </>
   );
 }

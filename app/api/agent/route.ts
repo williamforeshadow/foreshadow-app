@@ -18,6 +18,7 @@ import {
   loadInboundFilesForUser,
 } from '@/src/server/agent/inboundFiles';
 import type { TaskRow } from '@/src/agent/tools/findTasks';
+import { loadProposedTaskCards } from '@/src/server/agent/proposedTaskCards';
 
 // POST /api/agent
 //
@@ -188,6 +189,7 @@ export async function POST(req: NextRequest) {
       orgId,
       db: userDb,
       contextBlocks,
+      sessionId: sessionId ?? undefined,
     });
 
     // Durable confirmation buttons: if any preview tools registered pending
@@ -204,6 +206,10 @@ export async function POST(req: NextRequest) {
       (c) =>
         WRITE_TOOL_NAMES.has(c.name) &&
         !c.name.startsWith('preview_') &&
+        // A proposal is durable but INERT — it grounds write-claim language
+        // without committing anything, so it must not suppress the Confirm
+        // buttons of other previews staged in the same turn.
+        c.name !== 'propose_task' &&
         c.output.ok === true,
     );
     const allPendingActionIds = extractPendingActionIds(result.toolCalls);
@@ -240,6 +246,24 @@ export async function POST(req: NextRequest) {
     // real user message.
     await setPendingActionFollowup(pendingActionIds, result.followup, 0);
 
+    // Durable task proposals registered this turn (propose_task). Their ids
+    // are persisted on the assistant message so a reload re-renders the cards;
+    // the shaped card data rides the response for immediate rendering. A
+    // superseded proposal (replaces_proposal_id) is dropped from earlier
+    // messages by the rehydration path, which only returns live rows.
+    const proposedTaskIds: string[] = [];
+    for (const c of result.toolCalls) {
+      if (c.name === 'propose_task' && c.output.ok === true) {
+        const id = (c.output.data as { proposal_id?: unknown } | null)
+          ?.proposal_id;
+        if (typeof id === 'string' && id.length > 0) proposedTaskIds.push(id);
+      }
+    }
+    const proposedTaskCards = await loadProposedTaskCards(
+      userDb,
+      proposedTaskIds,
+    );
+
     await appendMessage({
       sessionId,
       appUserId: userId,
@@ -267,6 +291,10 @@ export async function POST(req: NextRequest) {
         ...(pendingActionIds.length > 0
           ? { pending_action_ids: pendingActionIds }
           : {}),
+        // Same reload story as pending_action_ids, but for proposal cards.
+        ...(proposedTaskIds.length > 0
+          ? { proposed_task_ids: proposedTaskIds }
+          : {}),
       },
     });
 
@@ -291,6 +319,7 @@ export async function POST(req: NextRequest) {
       tool_calls: result.toolCalls,
       pending_action_ids: pendingActionIds,
       tasks: Array.from(taskCardMap.values()),
+      proposed_tasks: proposedTaskCards,
       // Which conversation this landed in. Phase 2's switcher echoes it back on
       // the next request; harmless for the current client, which ignores it.
       session_id: sessionId,

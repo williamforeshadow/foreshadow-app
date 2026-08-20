@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthContext } from '@/lib/requireAuthContext';
 import { createTask as createTaskService } from '@/src/server/tasks/createTask';
+import { commitSlackFileAttachment } from '@/src/server/slack/attachInboundFile';
 import { taskUrl } from '@/src/lib/links';
 
 // Accept / dismiss a concierge-proposed task.
@@ -35,6 +36,8 @@ interface AcceptEdits {
   scheduled_time?: string | null;
   status?: string;
   assigned_user_ids?: string[];
+  bin_id?: string | null;
+  is_binned?: boolean;
 }
 
 const blankToNull = (v: string | null | undefined): string | null =>
@@ -42,7 +45,7 @@ const blankToNull = (v: string | null | undefined): string | null =>
 
 interface ProposedTaskRow {
   id: string;
-  conversation_id: string;
+  conversation_id: string | null;
   status: 'pending' | 'accepted' | 'dismissed';
   resulting_task_id: string | null;
   title: string;
@@ -53,6 +56,12 @@ interface ProposedTaskRow {
   suggested_assignee_ids: string[] | null;
   scheduled_date: string | null;
   scheduled_time: string | null;
+  // Ops-agent parity fields (null on concierge rows).
+  task_status: string | null;
+  template_id: string | null;
+  bin_id: string | null;
+  is_binned: boolean | null;
+  attachment_inbound_file_ids: string[] | null;
 }
 
 async function loadProposal(
@@ -62,7 +71,7 @@ async function loadProposal(
   const { data, error } = await supabase
     .from('proposed_tasks')
     .select(
-      'id, conversation_id, status, resulting_task_id, title, description, priority, property_id, department_id, suggested_assignee_ids, scheduled_date, scheduled_time',
+      'id, conversation_id, status, resulting_task_id, title, description, priority, property_id, department_id, suggested_assignee_ids, scheduled_date, scheduled_time, task_status, template_id, bin_id, is_binned, attachment_inbound_file_ids',
     )
     .eq('id', id)
     .maybeSingle();
@@ -130,7 +139,7 @@ export async function POST(
         | 'high'
         | 'medium'
         | 'low',
-      status: edits.status as
+      status: (edits.status ?? proposal.task_status ?? undefined) as
         | 'contingent'
         | 'not_started'
         | 'in_progress'
@@ -145,7 +154,17 @@ export async function POST(
         edits.department_id !== undefined
           ? blankToNull(edits.department_id)
           : proposal.department_id,
-      template_id: blankToNull(edits.template_id),
+      template_id:
+        edits.template_id !== undefined
+          ? blankToNull(edits.template_id)
+          : proposal.template_id,
+      bin_id:
+        edits.bin_id !== undefined ? blankToNull(edits.bin_id) : proposal.bin_id,
+      ...(edits.is_binned !== undefined
+        ? { is_binned: edits.is_binned }
+        : proposal.is_binned != null
+          ? { is_binned: proposal.is_binned }
+          : {}),
       scheduled_date:
         edits.scheduled_date !== undefined
           ? blankToNull(edits.scheduled_date)
@@ -169,6 +188,31 @@ export async function POST(
     return NextResponse.json({ error: result.error.message }, { status });
   }
 
+  // Ops-agent proposals can carry staged uploads; file them onto the new task.
+  // Best-effort after the create — a failed attachment is reported, never a
+  // reason to lose the task.
+  const attachmentIds = proposal.attachment_inbound_file_ids ?? [];
+  const attachmentErrors: string[] = [];
+  for (const inboundFileId of attachmentIds) {
+    try {
+      const attach = await commitSlackFileAttachment({
+        destination: 'task_attachment',
+        inbound_file_id: inboundFileId,
+        task_id: result.task.task_id,
+        actor_user_id: actorId,
+      });
+      if (!attach.ok) attachmentErrors.push(attach.error.message);
+    } catch (err) {
+      attachmentErrors.push(err instanceof Error ? err.message : 'attach failed');
+    }
+  }
+  if (attachmentErrors.length > 0) {
+    console.error('[proposed task] accept: attachments failed', {
+      id,
+      attachmentErrors,
+    });
+  }
+
   const { error: updateError } = await supabase
     .from('proposed_tasks')
     .update({
@@ -189,6 +233,9 @@ export async function POST(
   return NextResponse.json({
     task: result.task,
     task_url: taskUrl(result.task.task_id),
+    ...(attachmentErrors.length > 0
+      ? { attachment_errors: attachmentErrors }
+      : {}),
   });
 }
 

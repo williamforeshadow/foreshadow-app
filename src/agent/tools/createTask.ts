@@ -168,6 +168,8 @@ async function handler(
 
 export const createTask: ToolDefinition<Input, CreatedTaskRow> = {
   name: 'create_task',
+  // Web task creation moved to propose_task (durable proposal cards).
+  surfaces: ['slack'],
   description:
     "COMMIT a task that was previewed and confirmed by the user. Takes ONLY a confirmation_token from a recent preview_task call — task fields are not accepted here; they were locked in when the token was minted. Required workflow: 1) call preview_task with the task fields → get a plan + token, 2) present the plan to the user in plain English and ask for explicit confirmation, 3) only after the user confirms, call this tool with the token. The tool returns the created task on success or a confirmation_required error if the token is missing/expired/already-used. After a successful create, confirm the result back to the user using the returned title and ids.",
   inputSchema,

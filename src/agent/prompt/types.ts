@@ -31,4 +31,11 @@ export interface SurfacePrompt {
    * differ in what the model should say about it.
    */
   confirmation: string;
+  /**
+   * How NEW tasks get created on this surface. Genuinely divergent: web
+   * proposes durable cards via propose_task (the click on the card is the
+   * confirmation), Slack stages preview_task / preview_tasks_batch behind the
+   * token protocol. Lands in the write-protocol section; `- ` bullets.
+   */
+  taskCreation: string;
 }

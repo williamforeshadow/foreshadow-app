@@ -211,6 +211,9 @@ async function handler(
 
 export const previewTask: ToolDefinition<Input, PreviewTaskResultData> = {
   name: 'preview_task',
+  // Web task creation moved to propose_task (durable proposal cards); the
+  // token/Confirm flow remains the Slack path.
+  surfaces: ['slack'],
   description:
     "PREVIEW a task before creating it. ALWAYS call this first when the user asks to create a task. Title is the only required field — call this as soon as you can write one, and let the defaults cover everything the user did not mention rather than asking them for it. Validates the inputs, resolves every id you pass into a human-readable label (property name, template name, department name, assignee names), and returns a confirmation_token. After calling, present the plan to the user in plain English; the Confirm/Cancel pair shown below your message is how they agree, so do not also ask in prose. The token is single-use and expires in 5 minutes. If the user wants to change something, call preview_task again with the updated fields — each call mints a fresh token, the previous one is orphaned. preview_task never writes anything to the database; it is safe to call repeatedly.",
   inputSchema,

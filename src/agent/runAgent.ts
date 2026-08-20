@@ -9,6 +9,7 @@ import type {
 } from '@anthropic-ai/sdk/resources/beta/messages';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { todayInTz } from '@/src/lib/dates';
 import { toAnthropicTools } from './tools';
 import type { ToolContext } from './tools/types';
 import { dispatchToolUse, type ToolCallTrace } from './dispatch';
@@ -35,6 +36,10 @@ export type { AgentActor, AgentSurface };
 // keyed on what the model SAYS, not which tool fired, so any successful
 // preview/commit pair is grounding for a confirmation message.
 export const WRITE_TOOL_NAMES: ReadonlySet<string> = new Set([
+  // propose_task writes a durable proposal row (web). It grounds "I've
+  // proposed…" claims but is NOT a commit — the /api/agent route excludes it
+  // when deciding whether this turn already committed a write.
+  'propose_task',
   'preview_task',
   'create_task',
   'preview_bin',
@@ -128,13 +133,12 @@ const PHANTOM_BUTTON_CORRECTION =
 const CACHE_CONTROL = { type: 'ephemeral' } as const;
 
 /**
- * Serialize the registry and mark the final tool as a cache breakpoint.
- *
- * The registry is static per process, so this is hoisted out of the loop and
- * the resulting array is reused across every iteration of a run.
+ * Serialize the registry for a surface and mark the final tool as a cache
+ * breakpoint. Static per (process, surface); rebuilt per run, reused across
+ * every iteration of that run.
  */
-function buildCachedTools(): BetaTool[] {
-  const tools = toAnthropicTools() as BetaTool[];
+function buildCachedTools(surface: AgentSurface): BetaTool[] {
+  const tools = toAnthropicTools(surface) as BetaTool[];
   if (tools.length > 0) {
     tools[tools.length - 1] = {
       ...tools[tools.length - 1],
@@ -317,6 +321,11 @@ export interface RunAgentInput {
    * helps the model distinguish background from the actual request.
    */
   contextBlocks?: string[];
+  /**
+   * The agent_sessions row this run belongs to (web chat). Threaded into
+   * ToolContext so propose_task can stamp proposals with their session.
+   */
+  sessionId?: string;
 }
 
 export type { ToolCallTrace };
@@ -344,6 +353,7 @@ export async function runAgent({
   db,
   slack,
   contextBlocks,
+  sessionId,
 }: RunAgentInput): Promise<RunAgentOutput> {
   // Compose the user message: ambient context first (so the model
   // reads background before the request), then the prompt itself
@@ -394,7 +404,7 @@ export async function runAgent({
     },
   ];
   // Static across the run; marked once rather than re-serialized per iteration.
-  const tools = buildCachedTools();
+  const tools = buildCachedTools(surface);
   const toolCalls: ToolCallTrace[] = [];
 
   // Per-run execution context. Tools that bind to identity (e.g.
@@ -407,6 +417,10 @@ export async function runAgent({
 
   const ctx: ToolContext = {
     actor,
+    // The user's local "today", stamped onto date-relative tools by the
+    // dispatcher (injectReferenceDate) — the model no longer passes it.
+    referenceDate: todayInTz(clientTz).date,
+    sessionId,
     surface,
     slack,
     orgId: orgId ?? null,

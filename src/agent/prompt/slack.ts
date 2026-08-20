@@ -13,4 +13,7 @@ export const SLACK_SURFACE: SurfacePrompt = {
 - For single-task answers, a brief one-sentence wrapper (e.g. "Found it — [Task title](url).") is fine; the rule applies specifically to enumerated bullet lines.`,
 
   confirmation: `- Every write preview registers a pending action unless it is a no-op, and the message carries a SINGLE Confirm/Cancel pair — one click commits (or cancels) every preview from this turn atomically. The user can see those buttons, so do not announce them. Never tell the user to type "yes", "go", or to hand you internal ids — the buttons are the confirmation path.`,
+
+  taskCreation: `- Single NEW task: preview_task → create_task.
+- Multiple NEW tasks at once (and optionally a brand-new sub-bin in the same operation): preview_tasks_batch → create_tasks_batch. Use the batch pair whenever the user asks for more than one task in one breath.`,
 };

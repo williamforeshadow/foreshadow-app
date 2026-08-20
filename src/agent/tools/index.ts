@@ -44,6 +44,7 @@ import { readConversationThread } from './readConversationThread';
 import { concierge } from './concierge';
 import { findConciergeTraining } from './findConciergeTraining';
 import { getPropertyKnowledgeForGuest } from './getPropertyKnowledgeForGuest';
+import { proposeTask } from './proposeTask';
 
 // Tool registry. To add a new tool: define it in its own file, then add it
 // here. The agent loop pulls from this list — there's no other registration
@@ -98,17 +99,28 @@ export const TOOLS: ReadonlyArray<ToolDefinition<unknown, unknown>> = [
   concierge as unknown as ToolDefinition<unknown, unknown>,
   findConciergeTraining as unknown as ToolDefinition<unknown, unknown>,
   getPropertyKnowledgeForGuest as unknown as ToolDefinition<unknown, unknown>,
+  proposeTask as unknown as ToolDefinition<unknown, unknown>,
 ];
 
 export const TOOLS_BY_NAME: Readonly<Record<string, ToolDefinition<unknown, unknown>>> =
   Object.freeze(Object.fromEntries(TOOLS.map((t) => [t.name, t])));
 
+/** Tools available on a given surface (tools with no `surfaces` are universal). */
+export function toolsForSurface(
+  surface: 'web' | 'slack',
+): ToolDefinition<unknown, unknown>[] {
+  return TOOLS.filter((t) => !t.surfaces || t.surfaces.includes(surface));
+}
+
 /**
  * Convert the registry into the shape Anthropic expects under
- * `messages.create({ tools })`.
+ * `messages.create({ tools })`. Pass the surface so surface-scoped tools
+ * (e.g. propose_task on web vs preview_task/create_task on Slack) are
+ * offered only where they apply; omitting it returns the full registry.
  */
-export function toAnthropicTools() {
-  return TOOLS.map((t) => ({
+export function toAnthropicTools(surface?: 'web' | 'slack') {
+  const list = surface ? toolsForSurface(surface) : TOOLS;
+  return list.map((t) => ({
     name: t.name,
     description: t.description,
     input_schema: t.jsonSchema,

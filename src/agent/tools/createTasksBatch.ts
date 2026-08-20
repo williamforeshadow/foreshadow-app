@@ -236,6 +236,8 @@ async function handler(
 
 export const createTasksBatch: ToolDefinition<Input, CreateTasksBatchData> = {
   name: 'create_tasks_batch',
+  // Web task creation moved to propose_task (durable proposal cards).
+  surfaces: ['slack'],
   description:
     "COMMIT a batch of tasks (and optionally a new sub-bin) that was previewed and confirmed by the user. Takes ONLY a confirmation_token from a recent preview_tasks_batch call. Returns the created tasks (with task_url for each), the new sub-bin if one was created (with bin_id and bins_url), AND a per-task failures list. PARTIAL FAILURES are possible: this tool may return ok:true with a non-empty failures array. When that happens, narrate the partial outcome honestly to the user (e.g. \"I created 4 of 5 tasks — task 5 (\\\"X\\\") failed because Y. Want me to retry just that one?\"). When ok:false, the entire batch failed before any tasks could be written; surface the error message.",
   inputSchema,
