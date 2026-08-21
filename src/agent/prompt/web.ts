@@ -1,8 +1,33 @@
 import type { SurfacePrompt } from './types';
+import type { AgentActor } from './core';
+import {
+  OPENING,
+  currentContext,
+  HOW_TO_BE_USEFUL,
+  LINKING_TASKS,
+  LIST_FORMATTING_RULE,
+  WRITE_PREVIEW_FORMAT,
+  READ_TOOLS_INTRO,
+  FINDING_TASKS,
+  AVAILABILITY,
+  CAPABILITY_QUESTIONS,
+  GUEST_MESSAGING,
+  GROUNDING,
+  RESULT_ENVELOPE,
+  IDENTIFIER_RULES,
+  OPTION_LISTING,
+  writeProtocol,
+  CLOSING,
+  OPERATIONAL_INSTINCTS,
+} from './blocks';
 
 // The in-app chat panel (components/ai-chat/AiChatPanel.tsx and the mobile
 // sheet). Full markdown, real Confirm/Cancel buttons rendered under the
 // message, task cards rendered under that.
+//
+// This file OWNS the web prompt: buildWebPrompt composes it from the shared
+// blocks plus the web-specific text below. Reordering, cutting, or adding
+// web-only sections happens here and never touches Slack's prompt.
 
 export const WEB_SURFACE: SurfacePrompt = {
   rendering:
@@ -17,3 +42,34 @@ export const WEB_SURFACE: SurfacePrompt = {
 - For several new tasks in one request, call propose_task once per task in the same turn; each renders its own card. To also create a new sub-bin for them, use preview_bin → create_bin (that pair still previews) and propose the tasks into it after the bin commits.
 - After proposing, your reply is a short caption above the card(s) — say what you proposed and why in a sentence, without restating fields the card already shows, without mentioning buttons, and without claiming the task exists. If the user asks for a change to an undecided proposal, call propose_task again with the corrected fields and replaces_proposal_id.`,
 };
+
+/** The full web system prompt. */
+export function buildWebPrompt(
+  date: string,
+  tz: string,
+  actor: AgentActor | undefined,
+): string {
+  return [
+    `${OPENING}\n${WEB_SURFACE.rendering}`,
+    currentContext(date, tz, actor),
+    HOW_TO_BE_USEFUL,
+    LINKING_TASKS,
+    `${LIST_FORMATTING_RULE}\n${WEB_SURFACE.enumeration}`,
+    WRITE_PREVIEW_FORMAT,
+    READ_TOOLS_INTRO,
+    FINDING_TASKS,
+    AVAILABILITY,
+    CAPABILITY_QUESTIONS,
+    GUEST_MESSAGING,
+    GROUNDING,
+    RESULT_ENVELOPE,
+    IDENTIFIER_RULES,
+    OPTION_LISTING,
+    writeProtocol({
+      taskCreation: WEB_SURFACE.taskCreation,
+      confirmation: WEB_SURFACE.confirmation,
+    }),
+    CLOSING,
+    OPERATIONAL_INSTINCTS,
+  ].join('\n\n');
+}
