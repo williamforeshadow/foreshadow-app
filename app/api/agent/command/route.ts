@@ -23,8 +23,8 @@ import type { TaskRow } from '@/src/agent/tools/findTasks';
 // Returns `tasks` (the same TaskRow card shape the agent's find_tasks tool
 // emits) alongside the markdown so the in-app chat renders the visual task
 // cards under a command reply, exactly as it does for an agent turn. The
-// frontend keys the cards off the `/tasks/<id>` links the markdown already
-// carries (see referencedTasks in AiChatPanel), so command and agent replies
+// frontend renders whatever rows ride the response's `tasks` array directly —
+// rendering is decoupled from the markdown text — so command and agent replies
 // stay visually identical. This is web-only — Slack renders its own Block Kit.
 //
 // Command output is intentionally NOT persisted to ai_chat_messages: it is a

@@ -3,6 +3,7 @@ import {
   loadProposedTaskCards,
   type AgentProposedTaskCard,
 } from './proposedTaskCards';
+import { loadTaskRowsByIds, type TaskRow } from '@/src/agent/tools/findTasks';
 
 // Web chat sessions — list, rename, archive, and rehydrate.
 //
@@ -44,6 +45,12 @@ export interface HydratedMessage {
    * dismissed proposals rehydrate as tombstones, matching the concierge inbox.
    */
   proposed_tasks?: AgentProposedTaskCard[];
+  /**
+   * Found-task cards for this message (the last find_tasks call of its turn).
+   * Re-loaded fresh at rehydration, so a reload shows each task's CURRENT
+   * state rather than a snapshot; deleted tasks simply drop out.
+   */
+  tasks?: TaskRow[];
   variant?: 'success' | 'error';
 }
 
@@ -152,16 +159,18 @@ export async function loadSessionMessages(
 ): Promise<HydratedMessage[] | null> {
   const supabase = getSupabaseServer();
 
-  // Ownership first — the id came from the client.
+  // Ownership first — the id came from the client. org_id rides along for the
+  // found-task card loader (org-scoped by construction).
   const { data: session } = await supabase
     .from('agent_sessions')
-    .select('id')
+    .select('id, org_id')
     .eq('id', sessionId)
     .eq('surface', 'web')
     .eq('owner_user_id', appUserId)
     .is('archived_at', null)
     .maybeSingle();
   if (!session?.id) return null;
+  const orgId = (session as { org_id?: string | null }).org_id ?? null;
 
   const { data, error } = await supabase
     .from('ai_chat_messages')
@@ -181,13 +190,26 @@ export async function loadSessionMessages(
   // survivors are the ones that still deserve buttons.
   const referencedIds = new Set<string>();
   const referencedProposalIds = new Set<string>();
+  const referencedTaskIds = new Set<string>();
   for (const row of rows) {
     for (const id of readActionIds(row.metadata)) referencedIds.add(id);
     for (const id of readProposedTaskIds(row.metadata)) {
       referencedProposalIds.add(id);
     }
+    for (const id of readFoundTaskIds(row.metadata)) {
+      referencedTaskIds.add(id);
+    }
   }
   const liveIds = await loadLivePendingActionIds(Array.from(referencedIds));
+
+  // Found-task cards for the whole transcript, one query, current state.
+  const taskCards = orgId
+    ? new Map(
+        (await loadTaskRowsByIds(orgId, Array.from(referencedTaskIds))).map(
+          (t) => [t.task_id, t],
+        ),
+      )
+    : new Map<string, TaskRow>();
 
   // Proposal cards for the whole transcript in one query. Dismissed rows
   // (including superseded ones) are dropped — matching the concierge inbox,
@@ -228,6 +250,11 @@ export async function loadSessionMessages(
         .map((id) => proposalCards.get(id))
         .filter((c): c is AgentProposedTaskCard => c !== undefined);
       if (proposals.length > 0) message.proposed_tasks = proposals;
+
+      const tasks = readFoundTaskIds(meta)
+        .map((id) => taskCards.get(id))
+        .filter((t): t is TaskRow => t !== undefined);
+      if (tasks.length > 0) message.tasks = tasks;
     }
 
     const variant = readVariant(meta);
@@ -299,6 +326,12 @@ function readActionIds(meta: Record<string, unknown> | null): string[] {
 
 function readProposedTaskIds(meta: Record<string, unknown> | null): string[] {
   const raw = meta?.proposed_task_ids;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((v): v is string => typeof v === 'string' && v.length > 0);
+}
+
+function readFoundTaskIds(meta: Record<string, unknown> | null): string[] {
+  const raw = meta?.found_task_ids;
   if (!Array.isArray(raw)) return [];
   return raw.filter((v): v is string => typeof v === 'string' && v.length > 0);
 }

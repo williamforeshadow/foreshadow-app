@@ -27,7 +27,6 @@ import { ProjectCard } from '@/components/windows/projects/ProjectCard';
 import { useAiChat } from '@/components/ai-chat/AiChatProvider';
 import {
   isSameOriginHref,
-  referencedTasks,
   toRelativeHref,
   useAgentChat,
   type AgentProposedTaskCard,
@@ -492,7 +491,7 @@ export function MobileAgentChat() {
                       </div>
                       {msg.tasks &&
                         (() => {
-                          const cards = referencedTasks(msg.content, msg.tasks);
+                          const cards = msg.tasks;
                           if (cards.length === 0) return null;
                           const onOpen = (url: string) => {
                             close();

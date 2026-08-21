@@ -33,7 +33,6 @@ import { TaskAttachment } from './TaskAttachment';
 import { taskRowToCardItem } from './taskCardMapping';
 import {
   isSameOriginHref,
-  referencedTasks,
   toRelativeHref,
   useAgentChat,
   type AgentProposedTaskCard,
@@ -494,10 +493,7 @@ export function AiChatPanel() {
                             </div>
                             {msg.tasks &&
                               (() => {
-                                const cards = referencedTasks(
-                                  msg.content,
-                                  msg.tasks,
-                                );
+                                const cards = msg.tasks;
                                 if (cards.length === 0) return null;
                                 const onOpen = (url: string) =>
                                   router.push(toRelativeHref(url) as never);

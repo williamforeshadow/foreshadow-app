@@ -90,16 +90,11 @@ export function toRelativeHref(href: string): string {
   }
 }
 
-// Pick the tasks the answer text actually references — matched by the
-// /tasks/<id> deep link the agent emits — ordered by where they appear in the
-// prose so the card stack reads top-to-bottom with the text.
-export function referencedTasks(content: string, tasks: TaskRow[]): TaskRow[] {
-  return tasks
-    .map((t) => ({ t, idx: content.indexOf(`/tasks/${t.task_id}`) }))
-    .filter((x) => x.idx >= 0)
-    .sort((a, b) => a.idx - b.idx)
-    .map((x) => x.t);
-}
+// Found-task cards render straight from msg.tasks (the last find_tasks call's
+// rows) — rendering is decoupled from the reply text, so the model neither
+// controls nor can break which cards appear. The old referencedTasks() gate
+// (render only tasks whose /tasks/<id> link appeared in the prose) is gone
+// with the prompt rules that fed it.
 
 export type { SessionSummary };
 
@@ -162,6 +157,7 @@ function toAgentMessage(raw: HydratedMessageDto): AgentMessage {
       ? { pendingActionIds, confirmation: 'pending' as const }
       : {}),
     ...(raw.proposed_tasks?.length ? { proposals: raw.proposed_tasks } : {}),
+    ...(raw.tasks?.length ? { tasks: raw.tasks } : {}),
   };
 }
 
@@ -172,6 +168,7 @@ interface HydratedMessageDto {
   attachments?: { id: string; name: string }[];
   pending_action_ids?: string[];
   proposed_tasks?: AgentProposedTaskCard[];
+  tasks?: TaskRow[];
   variant?: 'success' | 'error';
 }
 

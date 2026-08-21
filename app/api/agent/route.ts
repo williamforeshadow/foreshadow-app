@@ -259,6 +259,31 @@ export async function POST(req: NextRequest) {
         if (typeof id === 'string' && id.length > 0) proposedTaskIds.push(id);
       }
     }
+    // Surface the structured task rows from the LAST successful find_tasks
+    // call this turn so the chat renders them as cards directly — rendering
+    // is decoupled from the prose, so the model doesn't have to (and can't)
+    // control it by writing links. Last call, not the union: when the model
+    // searches broad then narrows, the final call is the set its answer is
+    // actually about, and stale broad-pass rows would flood the message.
+    const foundTasks: TaskRow[] = (() => {
+      for (let i = result.toolCalls.length - 1; i >= 0; i--) {
+        const c = result.toolCalls[i];
+        if (c.name === 'find_tasks' && c.output.ok === true) {
+          const rows = (c.output.data ?? []) as TaskRow[];
+          const seen = new Set<string>();
+          const out: TaskRow[] = [];
+          for (const r of rows) {
+            if (r && typeof r.task_id === 'string' && !seen.has(r.task_id)) {
+              seen.add(r.task_id);
+              out.push(r);
+            }
+          }
+          return out;
+        }
+      }
+      return [];
+    })();
+
     const proposedTaskCards = await loadProposedTaskCards(
       userDb,
       proposedTaskIds,
@@ -295,30 +320,21 @@ export async function POST(req: NextRequest) {
         ...(proposedTaskIds.length > 0
           ? { proposed_task_ids: proposedTaskIds }
           : {}),
+        // And for found-task cards: ids only (rows are re-loaded fresh on
+        // rehydration, so a reload shows current state, not a snapshot).
+        ...(foundTasks.length > 0
+          ? { found_task_ids: foundTasks.map((t) => t.task_id) }
+          : {}),
       },
     });
 
-    // Surface the structured task rows returned by any find_tasks call this
-    // turn so the chat can render them as kanban-style cards. Deduped by
-    // task_id; the client picks which to show based on the tasks the answer
-    // actually links to.
-    const taskCardMap = new Map<string, TaskRow>();
-    for (const c of result.toolCalls) {
-      if (c.name === 'find_tasks' && c.output.ok === true) {
-        const rows = (c.output.data ?? []) as TaskRow[];
-        for (const r of rows) {
-          if (r && typeof r.task_id === 'string') {
-            taskCardMap.set(r.task_id, r);
-          }
-        }
-      }
-    }
+
 
     return NextResponse.json({
       answer: finalText,
       tool_calls: result.toolCalls,
       pending_action_ids: pendingActionIds,
-      tasks: Array.from(taskCardMap.values()),
+      tasks: foundTasks,
       proposed_tasks: proposedTaskCards,
       // Which conversation this landed in. Phase 2's switcher echoes it back on
       // the next request; harmless for the current client, which ignores it.

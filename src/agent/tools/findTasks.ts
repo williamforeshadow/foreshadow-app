@@ -572,6 +572,120 @@ async function validateForeignKeys(
   return null;
 }
 
+/**
+ * Shape one queried task row into the TaskRow the model (and the chat card
+ * renderers) consume. Shared by the find_tasks handler and the by-ids loader
+ * below so the two can never drift.
+ */
+function toTaskRow(
+  task: TaskQueryRow,
+  searchRank?: Map<string, RankedMatch>,
+): TaskRow {
+  const template = task.templates as { id: string; name: string } | null;
+  const department = task.departments as { id: string; name: string } | null;
+  const bin = task.project_bins as
+    | { id: string; name: string; is_system: boolean }
+    | null;
+  const reservation = task.reservations as
+    | {
+        id: string;
+        guest_name: string | null;
+        check_in: string | null;
+        check_out: string | null;
+      }
+    | null;
+  const assignments = (task.task_assignments ?? []) as Array<{
+    user_id: string;
+    users: { id: string; name: string; role: string } | null;
+  }>;
+  const commentAgg = task.project_comments as Array<{ count: number }> | null;
+  const commentCount = Array.isArray(commentAgg)
+    ? Number(commentAgg[0]?.count ?? 0)
+    : 0;
+  const attachmentAgg = task.project_attachments as
+    | Array<{ count: number }>
+    | null;
+  const attachmentCount = Array.isArray(attachmentAgg)
+    ? Number(attachmentAgg[0]?.count ?? 0)
+    : 0;
+
+  return {
+    task_id: task.id,
+    reservation_id: task.reservation_id ?? null,
+    property_id: task.property_id ?? null,
+    property_name: task.property_name ?? null,
+    template_id: task.template_id ?? null,
+    template_name: template?.name ?? null,
+    title: task.title ?? null,
+    priority: task.priority ?? 'medium',
+    department_id: task.department_id ?? null,
+    department_name: department?.name ?? null,
+    status: task.status ?? 'not_started',
+    scheduled_date: task.scheduled_date ?? null,
+    scheduled_time: task.scheduled_time ?? null,
+    bin_id: task.bin_id ?? null,
+    bin_name: bin?.name ?? null,
+    bin_is_system: !!bin?.is_system,
+    is_binned: task.is_binned ?? false,
+    has_template: task.template_id != null,
+    guest_name: reservation?.guest_name ?? null,
+    check_in: reservation?.check_in ?? null,
+    check_out: reservation?.check_out ?? null,
+    assigned_users: assignments.map((a) => ({
+      user_id: a.user_id,
+      name: a.users?.name ?? '',
+      role: a.users?.role ?? '',
+    })),
+    comment_count: commentCount,
+    attachment_count: attachmentCount,
+    created_at: task.created_at,
+    updated_at: task.updated_at,
+    completed_at: task.completed_at ?? null,
+    task_url: taskUrl(task.id),
+    ...(searchRank
+      ? {
+          matched_in: searchRank.get(task.id)?.matched_in,
+          // Two decimals: enough to compare rows against each other, not so
+          // much precision that it invites the model to read meaning into
+          // a difference of 0.003.
+          match_score:
+            Math.round((searchRank.get(task.id)?.score ?? 0) * 100) / 100,
+        }
+      : {}),
+  };
+}
+
+/**
+ * Card-shaped TaskRows by id, in input order, org-scoped.
+ *
+ * Serves chat transcript rehydration: found-task cards persist their ids in
+ * message metadata, and a reload needs the same TaskRow shape the live turn
+ * had. Colocated with SELECT/toTaskRow so the projection can never drift from
+ * what find_tasks returns. Rows that no longer exist (deleted tasks) are
+ * silently absent — the transcript renders what's still real.
+ */
+export async function loadTaskRowsByIds(
+  orgId: string,
+  ids: string[],
+): Promise<TaskRow[]> {
+  const wanted = Array.from(new Set(ids.filter(Boolean)));
+  if (wanted.length === 0) return [];
+  const { data, error } = await getSupabaseServer()
+    .from('turnover_tasks')
+    .select(SELECT)
+    .eq('org_id', orgId)
+    .in('id', wanted);
+  if (error) {
+    console.error('[agent] task card rehydration failed', { error });
+    return [];
+  }
+  const rows = (data ?? []) as unknown as TaskQueryRow[];
+  const byId = new Map(rows.map((r) => [r.id, toTaskRow(r)]));
+  return wanted
+    .map((id) => byId.get(id))
+    .filter((r): r is TaskRow => r !== undefined);
+}
+
 async function handler(
   input: Input,
   ctx: ToolContext,
@@ -959,80 +1073,9 @@ async function handler(
   const truncated = rows.length > limit;
   const trimmed = truncated ? rows.slice(0, limit) : rows;
 
-  const transformed: TaskRow[] = trimmed.map((task) => {
-    const template = task.templates as { id: string; name: string } | null;
-    const department = task.departments as { id: string; name: string } | null;
-    const bin = task.project_bins as
-      | { id: string; name: string; is_system: boolean }
-      | null;
-    const reservation = task.reservations as
-      | {
-          id: string;
-          guest_name: string | null;
-          check_in: string | null;
-          check_out: string | null;
-        }
-      | null;
-    const assignments = (task.task_assignments ?? []) as Array<{
-      user_id: string;
-      users: { id: string; name: string; role: string } | null;
-    }>;
-    const commentAgg = task.project_comments as Array<{ count: number }> | null;
-    const commentCount = Array.isArray(commentAgg)
-      ? Number(commentAgg[0]?.count ?? 0)
-      : 0;
-    const attachmentAgg = task.project_attachments as
-      | Array<{ count: number }>
-      | null;
-    const attachmentCount = Array.isArray(attachmentAgg)
-      ? Number(attachmentAgg[0]?.count ?? 0)
-      : 0;
-
-    return {
-      task_id: task.id,
-      reservation_id: task.reservation_id ?? null,
-      property_id: task.property_id ?? null,
-      property_name: task.property_name ?? null,
-      template_id: task.template_id ?? null,
-      template_name: template?.name ?? null,
-      title: task.title ?? null,
-      priority: task.priority ?? 'medium',
-      department_id: task.department_id ?? null,
-      department_name: department?.name ?? null,
-      status: task.status ?? 'not_started',
-      scheduled_date: task.scheduled_date ?? null,
-      scheduled_time: task.scheduled_time ?? null,
-      bin_id: task.bin_id ?? null,
-      bin_name: bin?.name ?? null,
-      bin_is_system: !!bin?.is_system,
-      is_binned: task.is_binned ?? false,
-      has_template: task.template_id != null,
-      guest_name: reservation?.guest_name ?? null,
-      check_in: reservation?.check_in ?? null,
-      check_out: reservation?.check_out ?? null,
-      assigned_users: assignments.map((a) => ({
-        user_id: a.user_id,
-        name: a.users?.name ?? '',
-        role: a.users?.role ?? '',
-      })),
-      comment_count: commentCount,
-      attachment_count: attachmentCount,
-      created_at: task.created_at,
-      updated_at: task.updated_at,
-      completed_at: task.completed_at ?? null,
-      task_url: taskUrl(task.id),
-      ...(searchRank
-        ? {
-            matched_in: searchRank.get(task.id)?.matched_in,
-            // Two decimals: enough to compare rows against each other, not so
-            // much precision that it invites the model to read meaning into
-            // a difference of 0.003.
-            match_score:
-              Math.round((searchRank.get(task.id)?.score ?? 0) * 100) / 100,
-          }
-        : {}),
-    };
-  });
+  const transformed: TaskRow[] = trimmed.map((task) =>
+    toTaskRow(task, searchRank),
+  );
 
   const meta: ToolMeta = {
     returned: transformed.length,
