@@ -65,6 +65,9 @@ async function handler(input: Input): Promise<ToolResult<CommitUpsertContactResu
 
 export const commitPropertyContactUpsert: ToolDefinition<Input, CommitUpsertContactResultData> = {
   name: 'commit_property_contact_upsert',
+  // Web contact create/update moved to propose_property_knowledge (contact
+  // kind, editable card); delete + batch remain on both surfaces.
+  surfaces: ['slack'],
   description:
     "COMMIT a previewed-and-confirmed property contact write (create or update). Takes ONLY a confirmation_token from preview_property_contact_upsert. Returns the resulting contact row plus mode='create'|'update' and (on update) the changes diff. Required workflow: preview → present → user confirms → commit. After success, confirm to the user using the row + changes you got back.",
   inputSchema,

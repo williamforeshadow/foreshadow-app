@@ -4,6 +4,10 @@ import {
   type AgentProposedTaskCard,
 } from './proposedTaskCards';
 import { loadTaskRowsByIds, type TaskRow } from '@/src/agent/tools/findTasks';
+import {
+  loadProposedKnowledgeCards,
+  type AgentProposedKnowledgeCard,
+} from './proposedKnowledgeCards';
 
 // Web chat sessions — list, rename, archive, and rehydrate.
 //
@@ -45,6 +49,8 @@ export interface HydratedMessage {
    * dismissed proposals rehydrate as tombstones, matching the concierge inbox.
    */
   proposed_tasks?: AgentProposedTaskCard[];
+  /** Knowledge proposal bubbles for this message (propose_property_knowledge). */
+  proposed_knowledge?: AgentProposedKnowledgeCard[];
   /**
    * Found-task cards for this message (the last find_tasks call of its turn).
    * Re-loaded fresh at rehydration, so a reload shows each task's CURRENT
@@ -191,6 +197,7 @@ export async function loadSessionMessages(
   const referencedIds = new Set<string>();
   const referencedProposalIds = new Set<string>();
   const referencedTaskIds = new Set<string>();
+  const referencedKnowledgeIds = new Set<string>();
   for (const row of rows) {
     for (const id of readActionIds(row.metadata)) referencedIds.add(id);
     for (const id of readProposedTaskIds(row.metadata)) {
@@ -198,6 +205,9 @@ export async function loadSessionMessages(
     }
     for (const id of readFoundTaskIds(row.metadata)) {
       referencedTaskIds.add(id);
+    }
+    for (const id of readProposedKnowledgeIds(row.metadata)) {
+      referencedKnowledgeIds.add(id);
     }
   }
   const liveIds = await loadLivePendingActionIds(Array.from(referencedIds));
@@ -216,6 +226,16 @@ export async function loadSessionMessages(
   // which renders pending cards and accepted tombstones only.
   const proposalCards = new Map(
     (await loadProposedTaskCards(supabase, Array.from(referencedProposalIds)))
+      .filter((c) => c.status !== 'dismissed')
+      .map((c) => [c.id, c]),
+  );
+  const knowledgeCards = new Map(
+    (
+      await loadProposedKnowledgeCards(
+        supabase,
+        Array.from(referencedKnowledgeIds),
+      )
+    )
       .filter((c) => c.status !== 'dismissed')
       .map((c) => [c.id, c]),
   );
@@ -255,6 +275,11 @@ export async function loadSessionMessages(
         .map((id) => taskCards.get(id))
         .filter((t): t is TaskRow => t !== undefined);
       if (tasks.length > 0) message.tasks = tasks;
+
+      const knowledge = readProposedKnowledgeIds(meta)
+        .map((id) => knowledgeCards.get(id))
+        .filter((c): c is AgentProposedKnowledgeCard => c !== undefined);
+      if (knowledge.length > 0) message.proposed_knowledge = knowledge;
     }
 
     const variant = readVariant(meta);
@@ -332,6 +357,14 @@ function readProposedTaskIds(meta: Record<string, unknown> | null): string[] {
 
 function readFoundTaskIds(meta: Record<string, unknown> | null): string[] {
   const raw = meta?.found_task_ids;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((v): v is string => typeof v === 'string' && v.length > 0);
+}
+
+function readProposedKnowledgeIds(
+  meta: Record<string, unknown> | null,
+): string[] {
+  const raw = meta?.proposed_knowledge_ids;
   if (!Array.isArray(raw)) return [];
   return raw.filter((v): v is string => typeof v === 'string' && v.length > 0);
 }

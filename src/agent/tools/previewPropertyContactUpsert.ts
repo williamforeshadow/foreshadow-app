@@ -124,6 +124,9 @@ async function handler(
 
 export const previewPropertyContactUpsert: ToolDefinition<Input, PreviewUpsertContactData> = {
   name: 'preview_property_contact_upsert',
+  // Web contact create/update moved to propose_property_knowledge (contact
+  // kind, editable card); delete + batch remain on both surfaces.
+  surfaces: ['slack'],
   description:
     "PREVIEW creating or updating a property/vendor contact. Single tool covers both: omit contact_id to create, pass contact_id to update. Contacts carry multi-select tags (cleaning, maintenance, contractors, owners, stakeholders, emergency, other), an optional schedule, and — mainly for owner contacts — a preferences field. Returns a plan with mode='create' or mode='update' and a confirmation_token. On update, returns a precise field-by-field changes diff — present those before/after values to the user. If the diff is EMPTY on update, skip the commit. Required workflow: preview → present plan → user confirms → commit_property_contact_upsert with token. Tokens are single-use, 5-minute TTL.",
   inputSchema,

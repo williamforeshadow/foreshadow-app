@@ -40,6 +40,7 @@ export const WRITE_TOOL_NAMES: ReadonlySet<string> = new Set([
   // proposed…" claims but is NOT a commit — the /api/agent route excludes it
   // when deciding whether this turn already committed a write.
   'propose_task',
+  'propose_property_knowledge',
   'preview_task',
   'create_task',
   'preview_bin',

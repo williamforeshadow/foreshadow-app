@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -39,6 +40,10 @@ import {
 } from './useAgentChat';
 import { ProposedTask } from '@/components/messages/ProposedTask';
 import { ProposedTaskEditorOverlay } from '@/components/messages/ProposedTaskEditorOverlay';
+import {
+  ProposedKnowledge,
+  type ProposedKnowledgeData,
+} from '@/components/messages/ProposedKnowledge';
 import { ComposerAttachments, MessageAttachments } from './ComposerAttachments';
 import { SessionList } from './SessionList';
 import styles from './AiChatPanel.module.css';
@@ -123,6 +128,7 @@ export function AiChatPanel() {
     runCommand,
     handleConfirmAction,
     refreshProposals,
+    refreshKnowledgeProposals,
     attachments,
     addAttachments,
     removeAttachment,
@@ -487,7 +493,7 @@ export function AiChatPanel() {
                         {msg.role === 'assistant' ? (
                           <>
                             <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-headings:my-3 prose-ul:my-2 prose-li:my-0.5">
-                              <ReactMarkdown components={markdownComponents}>
+                              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                                 {msg.content}
                               </ReactMarkdown>
                             </div>
@@ -533,6 +539,24 @@ export function AiChatPanel() {
                                 ))}
                               </div>
                             )}
+                            {msg.knowledgeProposals &&
+                              msg.knowledgeProposals.length > 0 && (
+                                <div className="flex flex-col">
+                                  {msg.knowledgeProposals.map((p) => (
+                                    <ProposedKnowledge
+                                      key={p.id}
+                                      // Card shape is a superset of the bubble's
+                                      // data type; target rides through as-is.
+                                      proposal={p as unknown as ProposedKnowledgeData}
+                                      propertyId={p.property_id}
+                                      align="start"
+                                      onChanged={() =>
+                                        void refreshKnowledgeProposals([p.id])
+                                      }
+                                    />
+                                  ))}
+                                </div>
+                              )}
                             {msg.pendingActionIds &&
                               msg.pendingActionIds.length > 0 &&
                               (msg.confirmation === 'pending' ||

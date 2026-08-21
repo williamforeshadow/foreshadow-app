@@ -10,6 +10,7 @@ import {
 import { commitPropertyKnowledgeWrite } from '@/src/server/properties/propertyKnowledgeWrite';
 import { upsertPropertyContact } from '@/src/server/properties/upsertPropertyContact';
 import { upsertPropertyPolicy } from '@/src/server/properties/upsertPropertyPolicy';
+import { commitSlackFileAttachment } from '@/src/server/slack/attachInboundFile';
 import type { KnowledgeTarget } from '@/src/server/messages/draftKnowledge';
 
 // Accept / dismiss a concierge-proposed knowledge addition.
@@ -27,13 +28,16 @@ type Supabase = SupabaseClient;
 
 interface ProposedKnowledgeRow {
   id: string;
-  conversation_id: string;
+  /** Null on ops-agent proposals (source='agent'); set on concierge rows. */
+  conversation_id: string | null;
   property_id: string | null;
   target: KnowledgeTarget;
   guest_visible: boolean;
   status: 'pending' | 'accepted' | 'dismissed';
   resulting_resource_type: string | null;
   resulting_resource_id: string | null;
+  /** Ops-agent proposals: uploads to file onto the result after accept. */
+  attachment_inbound_file_ids: string[] | null;
 }
 
 /** Resolve the target room: reuse an existing one (by id), else create it. */
@@ -114,7 +118,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
   const { data: row, error: loadErr } = await supabase
     .from('proposed_knowledge')
-    .select('id, conversation_id, property_id, target, guest_visible, status, resulting_resource_type, resulting_resource_id')
+    .select('id, conversation_id, property_id, target, guest_visible, status, resulting_resource_type, resulting_resource_id, attachment_inbound_file_ids')
     .eq('id', id)
     .maybeSingle();
   if (loadErr) return NextResponse.json({ error: loadErr.message }, { status: 500 });
@@ -349,6 +353,50 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     await unlockFields(supabase, propertyId, visibilityEntries, actorId, orgId);
   }
 
+  // Ops-agent proposals can carry staged photos; file them onto the written
+  // record. Only attribute and room results have a photo surface — anything
+  // else is reported as skipped. Best-effort after the write: a failed
+  // attachment is surfaced, never a reason to lose the knowledge.
+  const photoIds = proposal.attachment_inbound_file_ids ?? [];
+  const attachmentErrors: string[] = [];
+  if (photoIds.length > 0) {
+    const destination =
+      resourceType === 'attribute'
+        ? ('property_attribute_photo' as const)
+        : resourceType === 'room'
+          ? ('property_room_photo' as const)
+          : null;
+    if (!destination) {
+      attachmentErrors.push(
+        `Photos can only attach to a room or attribute result (got ${resourceType}).`,
+      );
+    } else {
+      for (const inboundFileId of photoIds) {
+        try {
+          const attach = await commitSlackFileAttachment({
+            destination,
+            inbound_file_id: inboundFileId,
+            property_id: propertyId,
+            ...(destination === 'property_attribute_photo'
+              ? { attribute_id: resourceId }
+              : { room_id: resourceId }),
+          });
+          if (!attach.ok) attachmentErrors.push(attach.error.message);
+        } catch (err) {
+          attachmentErrors.push(
+            err instanceof Error ? err.message : 'attach failed',
+          );
+        }
+      }
+    }
+    if (attachmentErrors.length > 0) {
+      console.error('[proposed knowledge] accept: attachments failed', {
+        id,
+        attachmentErrors,
+      });
+    }
+  }
+
   await supabase
     .from('proposed_knowledge')
     .update({
@@ -367,6 +415,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     resource_type: resourceType,
     resource_id: resourceId,
     guest_visible: guestVisible,
+    ...(attachmentErrors.length > 0
+      ? { attachment_errors: attachmentErrors }
+      : {}),
   });
 }
 

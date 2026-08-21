@@ -6,8 +6,9 @@ import { AGENT_COMMANDS } from '@/src/lib/agentCommands';
 import type { TaskRow } from '@/src/agent/tools/findTasks';
 import type { SessionSummary } from '@/src/server/agent/sessions';
 import type { AgentProposedTaskCard } from '@/src/server/agent/proposedTaskCards';
+import type { AgentProposedKnowledgeCard } from '@/src/server/agent/proposedKnowledgeCards';
 
-export type { AgentProposedTaskCard };
+export type { AgentProposedTaskCard, AgentProposedKnowledgeCard };
 
 // The agent conversation, lifted out of AiChatPanel so a second surface (the
 // mobile bottom-sheet chat) can drive the same wiring — /api/agent for free
@@ -39,6 +40,9 @@ export interface AgentMessage {
   // as a ProposedTask card with its own Create/Dismiss controls; deciding one
   // goes through /api/proposed-tasks/[id], not the confirm endpoint.
   proposals?: AgentProposedTaskCard[];
+  // Knowledge proposals (propose_property_knowledge) — the inline-editable
+  // ProposedKnowledge bubble; decided via /api/proposed-knowledge/[id].
+  knowledgeProposals?: AgentProposedKnowledgeCard[];
   // Files sent with a user message, echoed back into the bubble so the thread
   // shows what was attached where.
   attachments?: { id: string; name: string }[];
@@ -129,6 +133,8 @@ export interface UseAgentChat {
    * dismissed ones disappear.
    */
   refreshProposals: (proposalIds: string[]) => Promise<void>;
+  /** Same, for knowledge proposal bubbles (dismissed renders a tombstone). */
+  refreshKnowledgeProposals: (proposalIds: string[]) => Promise<void>;
   /** Files staged for the next message. */
   attachments: ComposerAttachment[];
   /** Stage picked files immediately; they upload in the background. */
@@ -157,6 +163,9 @@ function toAgentMessage(raw: HydratedMessageDto): AgentMessage {
       ? { pendingActionIds, confirmation: 'pending' as const }
       : {}),
     ...(raw.proposed_tasks?.length ? { proposals: raw.proposed_tasks } : {}),
+    ...(raw.proposed_knowledge?.length
+      ? { knowledgeProposals: raw.proposed_knowledge }
+      : {}),
     ...(raw.tasks?.length ? { tasks: raw.tasks } : {}),
   };
 }
@@ -168,6 +177,7 @@ interface HydratedMessageDto {
   attachments?: { id: string; name: string }[];
   pending_action_ids?: string[];
   proposed_tasks?: AgentProposedTaskCard[];
+  proposed_knowledge?: AgentProposedKnowledgeCard[];
   tasks?: TaskRow[];
   variant?: 'success' | 'error';
 }
@@ -556,6 +566,11 @@ export function useAgentChat(): UseAgentChat {
                 data.proposed_tasks.length > 0
                   ? data.proposed_tasks
                   : undefined,
+              knowledgeProposals:
+                Array.isArray(data.proposed_knowledge) &&
+                data.proposed_knowledge.length > 0
+                  ? data.proposed_knowledge
+                  : undefined,
             },
           ]);
         }
@@ -605,6 +620,41 @@ export function useAgentChat(): UseAgentChat {
       /* leave the stale card; the next hydration corrects it */
     }
   }, []);
+
+  const refreshKnowledgeProposals = useCallback(
+    async (proposalIds: string[]) => {
+      const ids = proposalIds.filter(Boolean);
+      if (ids.length === 0) return;
+      try {
+        const res = await fetch(
+          `/api/proposed-knowledge?ids=${encodeURIComponent(ids.join(','))}`,
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        const fresh: AgentProposedKnowledgeCard[] = Array.isArray(
+          data?.proposed_knowledge,
+        )
+          ? data.proposed_knowledge
+          : [];
+        const byId = new Map(fresh.map((c) => [c.id, c]));
+        const requested = new Set(ids);
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (!m.knowledgeProposals?.some((p) => requested.has(p.id))) {
+              return m;
+            }
+            // Unlike task proposals, dismissed knowledge renders its own
+            // tombstone — so a fresh row always replaces in place.
+            const next = m.knowledgeProposals.map((p) => byId.get(p.id) ?? p);
+            return { ...m, knowledgeProposals: next };
+          }),
+        );
+      } catch {
+        /* leave the stale bubble; the next hydration corrects it */
+      }
+    },
+    [],
+  );
 
   const handleConfirmAction = useCallback(
     async (
@@ -708,6 +758,7 @@ export function useAgentChat(): UseAgentChat {
     runCommand,
     handleConfirmAction,
     refreshProposals,
+    refreshKnowledgeProposals,
     attachments,
     addAttachments,
     removeAttachment,

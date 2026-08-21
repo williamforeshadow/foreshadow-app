@@ -19,6 +19,7 @@ import {
 } from '@/src/server/agent/inboundFiles';
 import type { TaskRow } from '@/src/agent/tools/findTasks';
 import { loadProposedTaskCards } from '@/src/server/agent/proposedTaskCards';
+import { loadProposedKnowledgeCards } from '@/src/server/agent/proposedKnowledgeCards';
 
 // POST /api/agent
 //
@@ -209,7 +210,7 @@ export async function POST(req: NextRequest) {
         // A proposal is durable but INERT — it grounds write-claim language
         // without committing anything, so it must not suppress the Confirm
         // buttons of other previews staged in the same turn.
-        c.name !== 'propose_task' &&
+        !c.name.startsWith('propose_') &&
         c.output.ok === true,
     );
     const allPendingActionIds = extractPendingActionIds(result.toolCalls);
@@ -252,12 +253,14 @@ export async function POST(req: NextRequest) {
     // superseded proposal (replaces_proposal_id) is dropped from earlier
     // messages by the rehydration path, which only returns live rows.
     const proposedTaskIds: string[] = [];
+    const proposedKnowledgeIds: string[] = [];
     for (const c of result.toolCalls) {
-      if (c.name === 'propose_task' && c.output.ok === true) {
-        const id = (c.output.data as { proposal_id?: unknown } | null)
-          ?.proposal_id;
-        if (typeof id === 'string' && id.length > 0) proposedTaskIds.push(id);
-      }
+      if (c.output.ok !== true) continue;
+      const id = (c.output.data as { proposal_id?: unknown } | null)
+        ?.proposal_id;
+      if (typeof id !== 'string' || id.length === 0) continue;
+      if (c.name === 'propose_task') proposedTaskIds.push(id);
+      if (c.name === 'propose_property_knowledge') proposedKnowledgeIds.push(id);
     }
     // Surface the structured task rows from the LAST successful find_tasks
     // call this turn so the chat renders them as cards directly — rendering
@@ -287,6 +290,10 @@ export async function POST(req: NextRequest) {
     const proposedTaskCards = await loadProposedTaskCards(
       userDb,
       proposedTaskIds,
+    );
+    const proposedKnowledgeCards = await loadProposedKnowledgeCards(
+      userDb,
+      proposedKnowledgeIds,
     );
 
     await appendMessage({
@@ -320,6 +327,9 @@ export async function POST(req: NextRequest) {
         ...(proposedTaskIds.length > 0
           ? { proposed_task_ids: proposedTaskIds }
           : {}),
+        ...(proposedKnowledgeIds.length > 0
+          ? { proposed_knowledge_ids: proposedKnowledgeIds }
+          : {}),
         // And for found-task cards: ids only (rows are re-loaded fresh on
         // rehydration, so a reload shows current state, not a snapshot).
         ...(foundTasks.length > 0
@@ -336,6 +346,7 @@ export async function POST(req: NextRequest) {
       pending_action_ids: pendingActionIds,
       tasks: foundTasks,
       proposed_tasks: proposedTaskCards,
+      proposed_knowledge: proposedKnowledgeCards,
       // Which conversation this landed in. Phase 2's switcher echoes it back on
       // the next request; harmless for the current client, which ignores it.
       session_id: sessionId,

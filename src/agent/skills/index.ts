@@ -32,11 +32,7 @@ import { join } from 'path';
 
 const SKILL_FILES = [
   'no-emojis.md',
-  'no-markdown-tables.md',
   'aggregating-questions.md',
-  'visual-handoff.md',
-  'conversation-recall.md',
-  'assume-competence.md',
 ] as const;
 
 const SKILLS_DIR = join(process.cwd(), 'src', 'agent', 'skills');

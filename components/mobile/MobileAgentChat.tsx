@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useRouter } from 'next/navigation';
 import { Drawer } from 'vaul';
 import {
@@ -33,6 +34,10 @@ import {
 } from '@/components/ai-chat/useAgentChat';
 import { ProposedTask } from '@/components/messages/ProposedTask';
 import { ProposedTaskEditorOverlay } from '@/components/messages/ProposedTaskEditorOverlay';
+import {
+  ProposedKnowledge,
+  type ProposedKnowledgeData,
+} from '@/components/messages/ProposedKnowledge';
 import { TaskAttachment } from '@/components/ai-chat/TaskAttachment';
 import { MobileSessionList } from './MobileSessionList';
 import {
@@ -143,6 +148,7 @@ export function MobileAgentChat() {
     runCommand,
     handleConfirmAction,
     refreshProposals,
+    refreshKnowledgeProposals,
     attachments,
     addAttachments,
     removeAttachment,
@@ -485,7 +491,7 @@ export function MobileAgentChat() {
                       }`}
                     >
                       <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-headings:my-3 prose-ul:my-2 prose-li:my-0.5">
-                        <ReactMarkdown components={markdownComponents}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                           {msg.content}
                         </ReactMarkdown>
                       </div>
@@ -518,6 +524,22 @@ export function MobileAgentChat() {
                           ))}
                         </div>
                       )}
+                      {msg.knowledgeProposals &&
+                        msg.knowledgeProposals.length > 0 && (
+                          <div className="flex flex-col">
+                            {msg.knowledgeProposals.map((p) => (
+                              <ProposedKnowledge
+                                key={p.id}
+                                proposal={p as unknown as ProposedKnowledgeData}
+                                propertyId={p.property_id}
+                                align="start"
+                                onChanged={() =>
+                                  void refreshKnowledgeProposals([p.id])
+                                }
+                              />
+                            ))}
+                          </div>
+                        )}
                       {msg.pendingActionIds &&
                         msg.pendingActionIds.length > 0 &&
                         (msg.confirmation === 'pending' ||
