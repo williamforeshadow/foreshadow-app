@@ -20,11 +20,12 @@ export interface SurfacePrompt {
    */
   rendering: string;
   /**
-   * The strict bare-linked-title rule for enumerated task lists. Both surfaces
-   * enforce it; they differ only in which card is already showing the metadata
-   * that inline text would duplicate.
+   * The strict bare-linked-title rule for enumerated task lists. Slack-only
+   * since found-task cards on web render from tool data (the model's prose no
+   * longer triggers or formats them); Slack still keys its Block Kit cards
+   * off the links the model writes.
    */
-  enumeration: string;
+  enumeration?: string;
   /**
    * How a previewed write gets confirmed here. Lands in the write protocol.
    * Both surfaces put a single Confirm/Cancel pair under the message; they

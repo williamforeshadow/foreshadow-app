@@ -12,5 +12,5 @@ one-sentence frame, never a restatement of the fields.
 It does NOT apply to a tokened write preview (updates, deletes,
 comments, property writes). A preview has no card under it — only
 Confirm and Cancel — so nothing is repeating the fields and nothing
-carries the plan except your text. There, list the fields as bullets in
-the shape the prompt specifies.
+carries the plan except your text. There, state the plan plainly:
+what will change, using the resolved names from the preview result.

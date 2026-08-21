@@ -145,13 +145,13 @@ for (const key of ['rendering', 'enumeration', 'confirmation', 'taskCreation'] a
   w('**web**');
   w();
   w('```text');
-  w(WEB_SURFACE[key]);
+  w(WEB_SURFACE[key] ?? '(not used on this surface)');
   w('```');
   w();
   w('**slack**');
   w();
   w('```text');
-  w(SLACK_SURFACE[key]);
+  w(SLACK_SURFACE[key] ?? '(not used on this surface)');
   w('```');
   w();
 }
