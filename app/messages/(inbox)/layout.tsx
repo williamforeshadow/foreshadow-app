@@ -84,23 +84,32 @@ function MessagesChrome({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      {/* One flush surface (no floating panes) matching the rest of the app —
-          columns are separated by hairline dividers, not gaps. `relative` so the
-          conversation page's task-editor panel anchors here, spanning the full
-          content row (list + conversation). */}
-      <div className="relative flex h-full min-h-0">
-        <aside className="msg-divider flex w-80 shrink-0 flex-col overflow-hidden border-r">
-          <WindowHeader title="Messages" inset="column">
-            <ListControls />
-          </WindowHeader>
-          {/* Collapsed to nothing until the search affordance is toggled, so
-              it costs no height in the default state. */}
-          <ConversationSearchField />
-          <div className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar">
-            <ListBody activeId={activeId} />
-          </div>
-        </aside>
-        <main className="min-w-0 flex-1">{children}</main>
+      {/* Horizontal-scroll wrapper. The master-detail (list + conversation +
+          context) needs ~960px to stay legible. When the routed card is narrower
+          than that — the AI chat panel docked on a small laptop, or just a narrow
+          window — the row holds its width and scrolls horizontally INSIDE the
+          card instead of collapsing the conversation to nothing. The sidebar and
+          chat panel stay fixed; only this content scrolls, the way the Schedule
+          grid does. On a wide card the min-width is inert and nothing scrolls. */}
+      <div className="h-full min-h-0 overflow-x-auto overflow-y-hidden overlay-scrollbar-x">
+        {/* One flush surface (no floating panes) matching the rest of the app —
+            columns are separated by hairline dividers, not gaps. `relative` so the
+            conversation page's task-editor panel anchors here, spanning the full
+            content row (list + conversation). */}
+        <div className="relative flex h-full min-h-0 min-w-[960px]">
+          <aside className="msg-divider flex w-80 shrink-0 flex-col overflow-hidden border-r">
+            <WindowHeader title="Messages" inset="column">
+              <ListControls />
+            </WindowHeader>
+            {/* Collapsed to nothing until the search affordance is toggled, so
+                it costs no height in the default state. */}
+            <ConversationSearchField />
+            <div className="min-h-0 flex-1 overflow-y-auto overlay-scrollbar">
+              <ListBody activeId={activeId} />
+            </div>
+          </aside>
+          <main className="min-w-0 flex-1">{children}</main>
+        </div>
       </div>
     </>
   );
