@@ -299,6 +299,13 @@
    always match. */
 .app-chat-docked {
   --app-chat-docked-width: 400px;
+  /* Floor for the routed content while the panel is docked. On a wide monitor
+     there's room to reflow the page beside the panel; on a small laptop the
+     leftover width would crush a dense page (the Messages list + conversation +
+     context collapses the conversation to nothing). Below this width the page
+     keeps its size and scrolls horizontally instead of squishing. Sized to keep
+     the Messages master-detail legible. */
+  --app-content-min-docked: 900px;
 }
 
 /* Reserve on the flex CONTAINER, not the card. The card's margin is a Tailwind
@@ -314,6 +321,19 @@
 
 .app-chat-docked [data-app-shell] {
   padding-right: calc(var(--app-chat-docked-width) + var(--app-shell-gap));
+  /* When the reserved layout would drop the content below its floor, scroll the
+     row horizontally rather than collapse the page. overflow-y stays hidden
+     (from the Tailwind overflow-hidden on this element) so pages keep owning
+     their own vertical scroll. */
+  overflow-x: auto;
+}
+
+/* Hold the routed content at its floor so a dense page (Messages) keeps its
+   proportions; the overflow it creates is what the horizontal scroll above
+   reveals. Overrides the card's Tailwind min-w-0. On a wide screen the card is
+   already wider than the floor, so this is inert and the page reflows. */
+.app-chat-docked [data-app-card] {
+  min-width: var(--app-content-min-docked);
 }
 
 /* Windowed ⇄ full-screen transition.
