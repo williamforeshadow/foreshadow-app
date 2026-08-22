@@ -3,13 +3,25 @@ import { getAnthropic, FILES_BETA } from '@/src/agent/anthropic';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { INBOUND_FILES_TABLE, type VisionStatus } from './inboundFiles';
 
+// Provider gate. The Anthropic Files API is Anthropic-only; when the agent
+// runs on OpenAI (AGENT_MODEL_PROVIDER=openai) an upload here would bill
+// Anthropic for a file the model never reads via a file_id — the OpenAI path
+// inlines files as base64 from storage instead (see loadRenderableByInboundFileId
+// and the render step in inboundFileVision.ts). Read at call time so a test or
+// deploy that flips the env is honoured without a module reload.
+function usesOpenAI(): boolean {
+  return process.env.AGENT_MODEL_PROVIDER === 'openai';
+}
+
 // Turning a staged file into something the model can actually look at.
 //
 // Every staged file gets ONE canonical renderable artifact, resolved once here
 // and reused on every turn afterwards:
 //
-//   images  -> transcoded if needed, uploaded, referenced by anthropic_file_id
-//   PDFs    -> uploaded as-is, referenced by anthropic_file_id
+//   images  -> transcoded if needed; on Anthropic uploaded + referenced by
+//              anthropic_file_id, on OpenAI left in storage and inlined as
+//              base64 at render (no Anthropic upload — see usesOpenAI)
+//   PDFs    -> same split: uploaded on Anthropic, inlined on OpenAI
 //   text-ish-> extracted into vision_text and inlined at render time
 //   the rest-> nothing, and a sentence saying why
 //
@@ -252,7 +264,13 @@ async function prepareImage(
   bytes: Buffer,
   kind: 'image-direct' | 'image-heif' | 'image-convert',
 ): Promise<PrepOutcome> {
+  // Normalise regardless of provider — it's how HEIC/corrupt images fail here
+  // (a clean 'failed' status) rather than at render time.
   const { payload, mediaType } = await normalizeImage(row.mime_type, bytes, kind);
+  if (usesOpenAI()) {
+    // No Anthropic upload: the OpenAI render path inlines from storage.
+    return { status: 'ready', anthropicFileId: null, mediaType };
+  }
   const fileId = await uploadToAnthropic(payload, row.name, mediaType);
   return { status: 'ready', anthropicFileId: fileId, mediaType };
 }
@@ -263,6 +281,9 @@ async function preparePdf(row: PrepRow, bytes: Buffer): Promise<PrepOutcome> {
       status: 'unsupported',
       note: `${formatBytes(bytes.byteLength)} PDF — too large to read`,
     };
+  }
+  if (usesOpenAI()) {
+    return { status: 'ready', anthropicFileId: null, mediaType: 'application/pdf' };
   }
   const fileId = await uploadToAnthropic(bytes, row.name, 'application/pdf');
   return { status: 'ready', anthropicFileId: fileId, mediaType: 'application/pdf' };
@@ -522,7 +543,61 @@ export interface InlineRenderable {
   kind: 'image' | 'pdf';
   /** data: URL — image/* for images, application/pdf for documents. */
   dataUrl: string;
+  /** Media type (e.g. 'image/jpeg', 'application/pdf'), for base64 blocks. */
+  mediaType: string;
+  /** Raw base64 payload (no data: prefix), for base64 content blocks. */
+  base64: string;
   filename: string;
+}
+
+interface RenderableRow {
+  name: string;
+  mime_type: string | null;
+  storage_bucket: string;
+  storage_path: string;
+  vision_media_type: string | null;
+}
+
+/**
+ * Download a stored original and normalise it to an inline renderable. Shared
+ * by both public resolvers below; no caching (the callers cache). Returns null
+ * (never throws) when the download fails or the format can't be normalised.
+ */
+async function buildRenderableFromRow(
+  row: RenderableRow,
+): Promise<InlineRenderable | null> {
+  const supabase = getSupabaseServer();
+  const { data: blob, error: dlError } = await supabase.storage
+    .from(row.storage_bucket)
+    .download(row.storage_path);
+  if (dlError || !blob) throw new Error(dlError?.message ?? 'no data');
+  const bytes = Buffer.from(await blob.arrayBuffer());
+
+  if (row.vision_media_type === 'application/pdf') {
+    if (bytes.byteLength > MAX_PDF_BYTES) throw new Error('pdf too large');
+    const base64 = bytes.toString('base64');
+    return {
+      kind: 'pdf',
+      mediaType: 'application/pdf',
+      base64,
+      dataUrl: `data:application/pdf;base64,${base64}`,
+      filename: row.name,
+    };
+  }
+
+  const kind = resolveKind(row.mime_type, row.name);
+  if (kind !== 'image-direct' && kind !== 'image-heif' && kind !== 'image-convert') {
+    throw new Error(`not an image: ${kind}`);
+  }
+  const { payload, mediaType } = await normalizeImage(row.mime_type, bytes, kind);
+  const base64 = payload.toString('base64');
+  return {
+    kind: 'image',
+    mediaType,
+    base64,
+    dataUrl: `data:${mediaType};base64,${base64}`,
+    filename: row.name,
+  };
 }
 
 /**
@@ -535,6 +610,36 @@ export interface InlineRenderable {
 const inlineRenderableCache = new Map<string, InlineRenderable | null>();
 const INLINE_CACHE_MAX = 24;
 
+async function cachedRenderable(
+  cacheKey: string,
+  loadRow: () => Promise<RenderableRow | null>,
+): Promise<InlineRenderable | null> {
+  if (inlineRenderableCache.has(cacheKey)) {
+    return inlineRenderableCache.get(cacheKey) ?? null;
+  }
+  let result: InlineRenderable | null = null;
+  try {
+    const row = await loadRow();
+    if (!row) throw new Error('row not found');
+    result = await buildRenderableFromRow(row);
+  } catch (err) {
+    console.warn('[vision prep] inline renderable failed', {
+      cacheKey,
+      err: err instanceof Error ? err.message : err,
+    });
+    result = null;
+  }
+  if (inlineRenderableCache.size >= INLINE_CACHE_MAX) {
+    const oldest = inlineRenderableCache.keys().next().value;
+    if (oldest !== undefined) inlineRenderableCache.delete(oldest);
+  }
+  inlineRenderableCache.set(cacheKey, result);
+  return result;
+}
+
+const RENDERABLE_COLUMNS =
+  'id, name, mime_type, storage_bucket, storage_path, vision_media_type';
+
 /**
  * Resolve an anthropic_file_id back to inline bytes from the stored original.
  *
@@ -546,60 +651,34 @@ const INLINE_CACHE_MAX = 24;
 export async function loadRenderableByAnthropicFileId(
   anthropicFileId: string,
 ): Promise<InlineRenderable | null> {
-  if (inlineRenderableCache.has(anthropicFileId)) {
-    return inlineRenderableCache.get(anthropicFileId) ?? null;
-  }
-
-  let result: InlineRenderable | null = null;
-  try {
-    const supabase = getSupabaseServer();
-    const { data, error } = await supabase
+  return cachedRenderable(`anth:${anthropicFileId}`, async () => {
+    const { data } = await getSupabaseServer()
       .from(INBOUND_FILES_TABLE)
-      .select('id, name, mime_type, storage_bucket, storage_path, vision_media_type')
+      .select(RENDERABLE_COLUMNS)
       .eq('anthropic_file_id', anthropicFileId)
       .maybeSingle();
-    if (error || !data) throw new Error(error?.message ?? 'row not found');
+    return (data as RenderableRow | null) ?? null;
+  });
+}
 
-    const row = data as PrepRow & { vision_media_type: string | null };
-    const { data: blob, error: dlError } = await supabase.storage
-      .from(row.storage_bucket)
-      .download(row.storage_path);
-    if (dlError || !blob) throw new Error(dlError?.message ?? 'no data');
-    const bytes = Buffer.from(await blob.arrayBuffer());
-
-    if (row.vision_media_type === 'application/pdf') {
-      if (bytes.byteLength > MAX_PDF_BYTES) throw new Error('pdf too large');
-      result = {
-        kind: 'pdf',
-        dataUrl: `data:application/pdf;base64,${bytes.toString('base64')}`,
-        filename: row.name,
-      };
-    } else {
-      const kind = resolveKind(row.mime_type, row.name);
-      if (kind !== 'image-direct' && kind !== 'image-heif' && kind !== 'image-convert') {
-        throw new Error(`not an image: ${kind}`);
-      }
-      const { payload, mediaType } = await normalizeImage(row.mime_type, bytes, kind);
-      result = {
-        kind: 'image',
-        dataUrl: `data:${mediaType};base64,${payload.toString('base64')}`,
-        filename: row.name,
-      };
-    }
-  } catch (err) {
-    console.warn('[vision prep] inline renderable failed', {
-      anthropicFileId,
-      err: err instanceof Error ? err.message : err,
-    });
-    result = null;
-  }
-
-  if (inlineRenderableCache.size >= INLINE_CACHE_MAX) {
-    const oldest = inlineRenderableCache.keys().next().value;
-    if (oldest !== undefined) inlineRenderableCache.delete(oldest);
-  }
-  inlineRenderableCache.set(anthropicFileId, result);
-  return result;
+/**
+ * Resolve an inbound file id (the row's own id) to inline bytes.
+ *
+ * The OpenAI path never uploads to the Anthropic Files API, so its ready rows
+ * carry no anthropic_file_id — they're keyed by the inbound file id and inlined
+ * as base64 straight from storage. Same normalisation as above.
+ */
+export async function loadRenderableByInboundFileId(
+  fileId: string,
+): Promise<InlineRenderable | null> {
+  return cachedRenderable(`inb:${fileId}`, async () => {
+    const { data } = await getSupabaseServer()
+      .from(INBOUND_FILES_TABLE)
+      .select(RENDERABLE_COLUMNS)
+      .eq('id', fileId)
+      .maybeSingle();
+    return (data as RenderableRow | null) ?? null;
+  });
 }
 
 /**

@@ -205,9 +205,12 @@ export async function renderInboundFilesAsMedia(
   let budget = maxTokens;
   let count = 0;
   for (const file of [...resolved].reverse()) {
+    // A 'ready' row is renderable either via an anthropic_file_id (Anthropic
+    // path) or by inlining base64 from storage (OpenAI path, no upload). Text
+    // rows are renderable once their extracted text has loaded.
     const renderable =
       file.vision_status === 'ready'
-        ? Boolean(file.anthropic_file_id)
+        ? true
         : file.vision_status === 'text' && textById.has(file.id);
     if (!renderable) continue;
 
@@ -241,20 +244,70 @@ export async function renderInboundFilesAsMedia(
       continue;
     }
 
-    if (file.vision_status === 'ready' && file.anthropic_file_id) {
+    if (file.vision_status === 'ready') {
       const isPdf = file.vision_media_type === 'application/pdf';
-      blocks.push(
-        isPdf
-          ? {
-              type: 'document',
-              source: { type: 'file', file_id: file.anthropic_file_id },
-              title: file.name,
-            }
-          : {
-              type: 'image',
-              source: { type: 'file', file_id: file.anthropic_file_id },
-            },
-      );
+
+      if (file.anthropic_file_id) {
+        // Anthropic path: reference the uploaded file by id (resolved to a
+        // data URL on the OpenAI translation path).
+        blocks.push(
+          isPdf
+            ? {
+                type: 'document',
+                source: { type: 'file', file_id: file.anthropic_file_id },
+                title: file.name,
+              }
+            : {
+                type: 'image',
+                source: { type: 'file', file_id: file.anthropic_file_id },
+              },
+        );
+      } else {
+        // No Anthropic upload (OpenAI provider): inline base64 straight from
+        // storage. A base64 source is provider-agnostic — both APIs accept it —
+        // so this block is safe even if the provider later flips. Imported
+        // lazily to keep the prep module's sharp/heic deps out of turns that
+        // don't render media.
+        const { loadRenderableByInboundFileId } = await import(
+          './inboundFileVisionPrep'
+        );
+        const inline = await loadRenderableByInboundFileId(file.id);
+        if (!inline) {
+          rendered.push({
+            fileId: file.id,
+            name: file.name,
+            label: null,
+            visible: false,
+            note: 'the contents couldn’t be read',
+          });
+          continue;
+        }
+        blocks.push(
+          inline.kind === 'pdf'
+            ? {
+                type: 'document',
+                source: {
+                  type: 'base64',
+                  media_type: 'application/pdf',
+                  data: inline.base64,
+                },
+                title: file.name,
+              }
+            : {
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: inline.mediaType as
+                    | 'image/jpeg'
+                    | 'image/png'
+                    | 'image/gif'
+                    | 'image/webp',
+                  data: inline.base64,
+                },
+              },
+        );
+      }
+
       rendered.push({
         fileId: file.id,
         name: file.name,

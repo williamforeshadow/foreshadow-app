@@ -34,8 +34,13 @@ import { loadProposedKnowledgeCards } from '@/src/server/agent/proposedKnowledge
 // bleeds into this panel.
 
 export async function POST(req: NextRequest) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.error('ANTHROPIC_API_KEY is not set');
+  // Require the ACTIVE provider's key, not always Anthropic's — on
+  // AGENT_MODEL_PROVIDER=openai the agent never calls Anthropic (file vision
+  // included, since 2026-08-22), so an Anthropic key is not needed.
+  const usingOpenAI = process.env.AGENT_MODEL_PROVIDER === 'openai';
+  const requiredKey = usingOpenAI ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY';
+  if (!process.env[requiredKey]) {
+    console.error(`${requiredKey} is not set`);
     return NextResponse.json(
       { error: 'Server configuration error: Missing API key' },
       { status: 500 },
