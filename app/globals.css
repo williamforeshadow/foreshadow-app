@@ -321,6 +321,20 @@
   padding-right: calc(var(--app-chat-docked-width) + var(--app-shell-gap));
 }
 
+/* Pages that must NOT change proportions when the chat panel docks. While the
+   panel is open, an element marked data-keep-width holds exactly the width it
+   had without the panel — the full card width: viewport minus sidebar, minus
+   the card's two margins, minus its two borders. The card itself shrank by the
+   panel's reserve, so the surplus becomes horizontal scroll in the page's own
+   overflow-x wrapper (see the Messages master-detail). Nothing inside reflows;
+   the panel only ever reveals a scrollbar. --app-sidebar-width is already 0 in
+   app-fullscreen, so this stays correct there too. */
+.app-chat-docked [data-keep-width] {
+  min-width: calc(
+    100vw - var(--app-sidebar-width) - 2 * var(--app-shell-gap) - 2px
+  );
+}
+
 /* Windowed ⇄ full-screen transition.
    The card's margin, radius and border-width are all driven by the variables
    .app-fullscreen overrides above. A transition on those PROPERTIES still
