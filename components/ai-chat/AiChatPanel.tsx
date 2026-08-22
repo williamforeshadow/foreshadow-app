@@ -260,6 +260,19 @@ export function AiChatPanel() {
     return () => window.clearTimeout(id);
   }, [isOpen, skipFocus]);
 
+  // Docked desktop chat reserves its own column rather than floating over the
+  // page: while it's open, mark <html> so the content card gives up a right
+  // gutter (globals.css) and the fixed panel drops into it. Same variable-driven
+  // reflow the fullscreen mode uses. Gated to the docked case — mobile has its
+  // own sheet, and fullscreen already lands on the card's rectangle.
+  useEffect(() => {
+    const docked = isOpen && !isMobile && !isFullscreen;
+    document.documentElement.classList.toggle('app-chat-docked', docked);
+    return () => {
+      document.documentElement.classList.remove('app-chat-docked');
+    };
+  }, [isOpen, isMobile, isFullscreen]);
+
   // Auto-submit a prompt handed to open() — the mobile compose-then-open flow,
   // where the pill's composer types the message and the panel appears with it
   // already sent. Deferred (not a synchronous setState in the effect body).
@@ -299,11 +312,27 @@ export function AiChatPanel() {
     : [];
   const showCommandMenu = commandMatches.length > 0 && !isLoading;
 
+  const isDocked = !isMobile && !isFullscreen;
   const layoutClass = isMobile
     ? styles.mobile
     : isFullscreen
       ? styles.fullscreen
       : styles.docked;
+
+  // The docked column slides in from the right edge it's seated against; the
+  // full-screen / mobile surfaces keep the lift-and-fade pop. The content card
+  // reflows alongside via its own CSS margin transition (globals.css).
+  const motionProps = isDocked
+    ? {
+        initial: { opacity: 0, x: 24 },
+        animate: { opacity: 1, x: 0 },
+        exit: { opacity: 0, x: 24 },
+      }
+    : {
+        initial: { opacity: 0, y: 12, scale: 0.99 },
+        animate: { opacity: 1, y: 0, scale: 1 },
+        exit: { opacity: 0, y: 12, scale: 0.99 },
+      };
 
   // Hydration counts as "not empty" so switching to a saved chat doesn't flash
   // the welcome screen on the way to its messages.
@@ -324,10 +353,8 @@ export function AiChatPanel() {
       {isOpen && (
         <motion.div
           className={`${styles.panel} ${layoutClass}`}
-          initial={{ opacity: 0, y: 12, scale: 0.99 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 12, scale: 0.99 }}
-          transition={{ duration: 0.16, ease: 'easeOut' }}
+          {...motionProps}
+          transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
           // Mobile: pin the panel's bottom above the software keyboard so the
           // input isn't covered and the fixed panel doesn't slide up over black.
           style={isMobile ? { bottom: keyboardInset } : undefined}

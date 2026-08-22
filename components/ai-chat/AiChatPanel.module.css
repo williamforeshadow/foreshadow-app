@@ -37,13 +37,28 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 
-/* Docked: floating panel anchored bottom-right. */
+/* Docked: a full-height column seated against the right edge, inside the shell
+   gap so it lines up with the content card. It does NOT float over the page —
+   the card gives up a matching right gutter (see .app-chat-docked in
+   globals.css) so the panel sits beside the content, not on top of it. Width
+   is shared with that reserve rule through --app-chat-docked-width. */
 .docked {
-  right: 1.5rem;
-  bottom: 1.5rem;
-  width: 560px;
-  height: min(96vh, 880px);
-  border-radius: 0.875rem;
+  top: var(--app-shell-gap);
+  right: var(--app-shell-gap);
+  bottom: var(--app-shell-gap);
+  width: var(--app-chat-docked-width, 400px);
+  border-radius: var(--app-shell-radius);
+  /* Seated, not floating: trade the heavy lifted shadow for a soft seam so it
+     reads as part of the shell alongside the card. */
+  box-shadow:
+    0 2px 16px -8px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+:global(.dark) .docked {
+  box-shadow:
+    0 2px 16px -8px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 
 /* Full-screen (desktop): lands on exactly the content card's rectangle, so it

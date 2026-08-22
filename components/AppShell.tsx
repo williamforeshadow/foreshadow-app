@@ -97,7 +97,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[var(--app-shell-bg)]">
+    <div data-app-shell className="flex h-screen overflow-hidden bg-[var(--app-shell-bg)]">
       {/* useSearchParams needs a Suspense boundary this high in the tree. */}
       <Suspense fallback={<div data-app-sidebar className="hidden h-full w-64 shrink-0 md:block" />}>
         {/* w-64 has to be on this wrapper, not just on the panel inside it:

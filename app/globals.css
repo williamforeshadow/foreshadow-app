@@ -291,6 +291,31 @@
   border-width: 0;
 }
 
+/* Docked AI chat as a reserved side column — set on <html> by AiChatPanel while
+   the desktop docked panel is open. The panel itself is position:fixed and pins
+   to the right edge (AiChatPanel.module.css .docked); the reserve below shrinks
+   the page so it reflows beside the panel instead of being covered.
+   --app-chat-docked-width is shared with .docked so the gutter and the panel
+   always match. */
+.app-chat-docked {
+  --app-chat-docked-width: 400px;
+}
+
+/* Reserve on the flex CONTAINER, not the card. The card's margin is a Tailwind
+   utility (md:m-[var(--app-shell-gap)]) that outranks a plain rule here, so a
+   margin-right override on the card silently loses and the card never shrinks.
+   The shell row carries no padding utility, so padding-right wins cleanly: it
+   pulls the flex card's right edge in by the panel's width plus a seam, while
+   the fixed-width sidebar to its left is untouched. Transition the padding so
+   the page slides open alongside the panel. */
+[data-app-shell] {
+  transition: padding var(--app-shell-motion) var(--app-shell-ease);
+}
+
+.app-chat-docked [data-app-shell] {
+  padding-right: calc(var(--app-chat-docked-width) + var(--app-shell-gap));
+}
+
 /* Windowed ⇄ full-screen transition.
    The card's margin, radius and border-width are all driven by the variables
    .app-fullscreen overrides above. A transition on those PROPERTIES still
